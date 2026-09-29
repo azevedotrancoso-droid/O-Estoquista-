@@ -1,0 +1,265 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>O Estoquista</title>
+<link rel="stylesheet" href="style.css">
+
+
+
+
+
+
+
+
+
+
+</head>
+<body>
+<div id="loginScreen" class="login-screen">
+  <div class="login-card">
+    <div class="login-logo">📦</div>
+    <h1>O Estoquista</h1>
+    <p class="subtitle">Acesse sua conta para continuar</p>
+    <div id="loginError" class="login-error">Usuário ou senha inválidos.</div>
+    <form id="loginForm" onsubmit="event.preventDefault();login();">
+      <div class="login-field">
+        <label for="loginUser">Usuário</label>
+        <input id="loginUser" type="text" autocomplete="username" placeholder="Digite seu usuário" required>
+      </div>
+      <div class="login-field">
+        <label for="loginPass">Senha</label>
+        <input id="loginPass" type="password" autocomplete="current-password" placeholder="Digite sua senha" required>
+      </div>
+      <button class="login-btn" type="submit">Entrar</button>
+    </form>
+  </div>
+</div>
+
+<header aria-label="O Estoquista"><div class="brand"><span class="brand-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 7.5 12 4l8 3.5v9L12 20l-8-3.5z"/><path d="M4 7.5 12 11l8-3.5M12 11v9"/></svg></span><span>O Estoquista</span></div><small>Controle de estoque,<br>requisições, entradas e saídas</small></header>
+<nav id="nav">
+<button data-view="inicio" class="active">🏠 Início</button><button data-view="produtos">📦 Produtos</button>
+<button data-view="requisicoes">📋 Requisições</button><button data-view="pendencias">📌 Pendências</button><button data-view="anotacoes">📝 Anotações</button><button data-view="movimentos">🔄 Entradas/Saídas</button><button data-view="suco">🍊 Suco de Laranja</button><button data-view="gelo">🧊 Gelo</button><button data-view="bebidas">🍸 Bebidas</button><button data-view="inventario">📋 Inventário</button><button data-view="relatorios" data-admin-only="1">📊 Relatórios</button><button data-view="auditoria" data-admin-only="1">🛡️ Auditoria</button>
+<button data-view="usuarios" data-admin-only="1">👤 Usuários</button><button data-view="menu">⚙️ Menu</button>
+</nav>
+<main>
+<div class="app-top-actions"><button id="logoutBtn" class="logout-btn" type="button" onclick="logout()" title="Sair da conta" aria-label="Sair da conta"><span class="logout-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M10 5H5v14h5"/><path d="M13 8l4 4-4 4M17 12H9"/></svg></span><span>Sair</span></button></div>
+<section id="inicio" class="view active">
+<h2>Painel</h2><div class="grid">
+<div class="card">Produtos cadastrados<div class="stat" id="sProdutos">0</div></div>
+<div class="card">Estoque baixo<div class="stat" id="sBaixo">0</div></div>
+<div class="card">Requisições<div class="stat" id="sReq">0</div></div>
+<div class="card">Movimentações<div class="stat" id="sMov">0</div></div>
+</div>
+<div class="card stock-alert-card"><h3>🚨 Alertas de estoque</h3><div id="baixo"></div></div>
+<div class="card monthly-consumption-card">
+  <div class="monthly-consumption-head">
+    <div><h3>📊 Consumo e gastos do mês</h3><p class="muted">Distribuição dos gastos registrados com suco de laranja e gelo no mês atual.</p></div>
+    <div class="monthly-total"><span>Total do mês</span><strong id="consumoTotalMes">R$ 0,00</strong></div>
+  </div>
+  <div class="consumption-chart-wrap"><div id="consumoGrafico" class="consumption-chart"></div><div id="consumoLegenda" class="consumption-legend"></div></div>
+</div>
+</section>
+
+<section id="produtos" class="view"><h2>Produtos</h2>
+<div class="card"><h3>Cadastrar produto</h3><div class="grid">
+<div><label>Nome</label><input id="pNome" placeholder="Ex.: Refrigerante"></div>
+<div><label>Código</label><input id="pCod" placeholder="Código"></div>
+<div><label>Unidade de medida</label><select id="pUn"><option>UN</option><option>CX</option><option>FD</option><option>KG</option><option>L</option><option>ML</option><option>PCT</option></select></div>
+<div><label>Categoria</label><select id="pCategoria"><option value="">Selecione a categoria</option></select></div>
+<div><label>Estoque inicial</label><input id="pEst" type="number" min="0" value="0"></div>
+<div><label>Estoque mínimo</label><input id="pMin" type="number" min="0" value="0"></div><div><label>Estoque ideal</label><input id="pIdeal" type="number" min="0" value="0"></div>
+</div><div class="actions"><button data-stock-action="1" onclick="addProduto()">Adicionar produto</button></div>
+<div class="category-create-box"><div><label>Nova categoria</label><input id="novaCategoria" maxlength="60" placeholder="Ex.: Congelados, Hortifruti..."></div><button type="button" data-stock-action="1" onclick="criarCategoria()">＋ Criar categoria</button></div>
+<p class="muted category-help">As categorias criadas ficam salvas no dispositivo e passam a aparecer automaticamente no cadastro, filtros e inventário.</p>
+</div>
+<div class="card products-card">
+<h3>📦 Produtos cadastrados</h3>
+<div class="product-tools">
+<div><label>🔎 Buscar produto</label><input id="buscaProduto" placeholder="Digite nome ou código..." oninput="renderProdutos()"></div>
+<div><label>Filtro de estoque</label><select id="filtroProduto" onchange="renderProdutos()"><option value="todos">Todos os produtos</option><option value="baixo">Estoque baixo</option><option value="normal">Estoque normal</option></select></div>
+<div><label>Categoria</label><select id="filtroCategoriaProduto" onchange="renderProdutos()"><option value="">Todas as categorias</option></select></div>
+</div>
+<div id="prodResumo" class="product-summary"></div>
+<div id="prodTable"></div>
+</div>
+</section>
+
+<section id="requisicoes" class="view">
+<div class="req-page-head"><div><h2>Requisições</h2><div class="req-count"><span id="reqCount">0</span> registro(s) local</div></div><button class="req-refresh" type="button" onclick="renderRequisicoes()">Atualizar</button></div>
+<div class="card req-filter-card">
+<input id="reqBusca" placeholder="Buscar REQ, solicitante..." oninput="renderRequisicoes()">
+<select id="reqSetor" onchange="renderRequisicoes()"><option value="">Todos setores</option><option>Bar</option><option>Cozinha</option></select>
+<select id="reqStatusFiltro" onchange="renderRequisicoes()"><option value="">Todos status</option><option value="Pendente">Pendente</option><option value="Separando">Separando</option><option value="Entregue">Entregue</option></select>
+<select id="reqPrioridadeFiltro" onchange="renderRequisicoes()"><option value="">Prioridades</option><option value="Normal">Normal</option><option value="Alta">Alta</option><option value="Urgente">Urgente</option></select>
+<button class="req-clear" type="button" onclick="limparFiltrosReq()">Limpar filtros</button>
+</div>
+<div id="reqTable" class="req-list"></div>
+<div class="card req-new-card">
+<h3>Nova requisição</h3><div class="grid">
+<div><label>Setor</label><select id="rSetor"><option>Bar</option><option>Cozinha</option></select></div>
+<div><label>Prioridade</label><select id="rPrioridade"><option>Normal</option><option>Alta</option><option>Urgente</option></select></div>
+<div><label>Produto</label><select id="rProd"></select></div><div><label>Quantidade</label><input id="rQtd" type="number" min="1" value="1"></div>
+<div><label>Unidade de medida</label><input id="rUn" type="text" readonly placeholder="Automática pelo produto"></div><div><label>Solicitante</label><input id="rSol" placeholder="Nome"></div>
+</div><div class="actions"><button type="button" data-stock-action="1" onclick="addReqItem()">Adicionar item</button><button type="button" class="green" data-stock-action="1" onclick="addReq()">Criar requisição</button></div><div id="reqDraftItems" class="req-items-box"></div></div>
+</section>
+
+<section id="pendencias" class="view">
+<div class="req-page-head"><div><h2>📌 Pendências</h2><div class="req-count"><span id="pendCount">0</span> empréstimo(s)</div></div><button class="req-refresh" type="button" onclick="renderPendencias()">Atualizar</button></div>
+<div class="card req-filter-card">
+<input id="pendBusca" placeholder="Buscar pessoa, número ou produto..." oninput="renderPendencias()">
+<select id="pendStatusFiltro" onchange="renderPendencias()"><option value="">Todos os status</option><option value="Pendente">Pendentes</option><option value="Pago">Pagos</option></select>
+<button class="req-clear" type="button" onclick="limparFiltrosPendencias()">Limpar filtros</button>
+</div>
+<div id="pendTable" class="req-list"></div>
+<div class="card req-new-card">
+<h3>Novo empréstimo</h3><div class="grid">
+<div><label>Para quem está sendo emprestado</label><input id="ePessoa" placeholder="Nome da pessoa / setor"></div>
+<div><label>Data do empréstimo</label><input id="eData" type="date"></div>
+<div><label>Produto</label><select id="eProd"></select></div><div><label>Quantidade</label><input id="eQtd" type="number" min="1" value="1"></div>
+<div><label>Unidade de medida</label><input id="eUn" type="text" readonly placeholder="Automática pelo produto"></div>
+<div><label>Observação</label><input id="eObs" placeholder="Opcional"></div>
+</div><div class="actions"><button type="button" data-stock-action="1" onclick="addEmprestimoItem()">Adicionar item</button><button type="button" class="green" data-stock-action="1" onclick="addEmprestimo()">Registrar empréstimo</button></div><div id="emprestimoDraftItems" class="req-items-box"></div></div>
+</section>
+
+<section id="anotacoes" class="view">
+<h2>Anotações</h2>
+<div class="card notes-new-card"><h3>Nova anotação</h3><div class="grid">
+<div><label>Título</label><input id="noteTitulo" maxlength="100" placeholder="Ex.: Conferência do estoque"></div>
+<div><label>Data</label><input id="noteData" type="date"></div></div>
+<label>Observação</label><textarea id="noteTexto" rows="6" maxlength="5000" placeholder="Digite sua anotação..."></textarea>
+<div class="actions"><button id="noteSaveBtn" class="green" type="button" onclick="addNote()">Salvar anotação</button><button id="noteCancelBtn" class="secondary" type="button" onclick="cancelNoteEdit()" style="display:none">Cancelar edição</button><button class="secondary" type="button" onclick="clearNoteForm()">Limpar</button></div></div>
+<div class="card"><div class="notes-head"><div><h3 style="margin:0">Minhas anotações</h3><span id="noteCount" class="muted">0 anotação(ões)</span></div><button class="secondary" type="button" onclick="exportNotesPDF()">📄 Exportar anotações em PDF</button></div><div id="notesList" class="notes-list"></div></div>
+</section>
+
+<section id="movimentos" class="view">
+<div class="mov-page-head"><div><h2>Entradas e Saídas</h2><div class="mov-count">Registre e acompanhe todas as movimentações do estoque</div></div></div>
+<div class="card mov-form-card"><h3>Lançar movimento</h3><div class="grid">
+<div><label>Produto</label><select id="mProd"></select></div><div><label>Tipo</label><select id="mTipo"><option value="entrada">Entrada</option><option value="saida">Saída</option></select></div>
+<div><label>Quantidade</label><input id="mQtd" type="number" min="1" value="1"></div><div><label>Data</label><input id="mData" type="date"></div><div><label>Motivo</label><input id="mMot" placeholder="Compra, ajuste, perda..."></div>
+</div><div class="actions"><button class="mov-launch" data-stock-action="1" onclick="addMov()">Lançar movimento</button></div></div>
+<div class="card mov-list-card">
+<div class="mov-list-card-head"><div><h3>Histórico de movimentações</h3><span id="movCountLabel"></span></div>
+<div class="mov-filter"><label for="filtroMovimento">Filtrar por</label><select id="filtroMovimento" onchange="renderMovimentos()"><option value="">Todos</option><option value="Perda">Perda</option><option value="Requisição">Requisição</option><option value="Empréstimo">Empréstimo</option></select></div></div>
+<div id="movTable"></div></div></section>
+
+<section id="suco" class="view special-purchase-view">
+<div class="special-page-head"><div><h2>🍊 Suco de Laranja</h2><div class="special-subtitle">Controle das compras de suco e acompanhamento do gasto mensal.</div></div></div>
+<div class="special-stats"><div class="card special-total-card"><span>Gasto no mês</span><strong id="sucoTotalMes">R$ 0,00</strong><small id="sucoMesLabel"></small></div><div class="card"><span>Galões comprados no mês</span><strong id="sucoQtdMes">0</strong><small>Galões de 5 litros</small></div></div>
+<div class="card special-form-card"><h3>Lançar compra de suco</h3><div class="grid">
+<div><label>Quantidade de galões</label><input id="sucoQtd" type="number" min="1" step="1" value="1"></div>
+<div><label>Unidade de medida</label><input id="sucoUn" type="text" value="Galão de 5 litros" readonly></div>
+<div><label>Preço por galão</label><input id="sucoPreco" type="number" min="0" step="0.01" value="45.00"></div>
+<div><label>Data da compra</label><input id="sucoData" type="date"></div>
+</div><div class="special-total-preview">Total deste lançamento: <strong id="sucoLancamentoTotal">R$ 45,00</strong></div><div class="actions"><button class="special-orange" type="button" data-stock-action="1" onclick="addCompraEspecial('suco')">🍊 Lançar compra</button></div></div>
+<div class="card"><div class="special-list-head"><div><h3>Histórico de compras</h3><span id="sucoCount" class="muted">0 lançamento(s)</span></div><input id="sucoMesFiltro" type="month" onchange="renderComprasEspeciais()"></div><div id="sucoTable" class="special-list"></div></div>
+</section>
+
+<section id="gelo" class="view special-purchase-view">
+<div class="special-page-head"><div><h2>🧊 Gelo</h2><div class="special-subtitle">Controle das compras de gelo e acompanhamento do gasto mensal.</div></div></div>
+<div class="special-stats"><div class="card special-total-card"><span>Gasto no mês</span><strong id="geloTotalMes">R$ 0,00</strong><small id="geloMesLabel"></small></div><div class="card"><span>Pacotes comprados no mês</span><strong id="geloQtdMes">0</strong><small>Pacotes</small></div></div>
+<div class="card special-form-card"><h3>Lançar compra de gelo</h3><div class="grid">
+<div><label>Quantidade de pacotes</label><input id="geloQtd" type="number" min="1" step="1" value="1"></div>
+<div><label>Unidade de medida</label><input id="geloUn" type="text" value="Pacote" readonly></div>
+<div><label>Preço por pacote</label><input id="geloPreco" type="number" min="0" step="0.01" placeholder="Digite o preço"></div>
+<div><label>Data da compra</label><input id="geloData" type="date"></div>
+</div><div class="special-total-preview">Total deste lançamento: <strong id="geloLancamentoTotal">R$ 0,00</strong></div><div class="actions"><button class="special-blue" type="button" data-stock-action="1" onclick="addCompraEspecial('gelo')">🧊 Lançar compra</button></div></div>
+<div class="card"><div class="special-list-head"><div><h3>Histórico de compras</h3><span id="geloCount" class="muted">0 lançamento(s)</span></div><input id="geloMesFiltro" type="month" onchange="renderComprasEspeciais()"></div><div id="geloTable" class="special-list"></div></div>
+</section>
+
+<section id="bebidas" class="view drinks-view">
+<div class="page-head drinks-page-head"><div><h2>🍸 Bebidas</h2><div class="muted">Cadastre destilados e monte fichas técnicas completas dos seus drinks.</div></div></div>
+
+<div class="drink-stats">
+  <div class="card"><span>Destilados cadastrados</span><strong id="bebidasDestiladosCount">0</strong></div>
+  <div class="card"><span>Drinks cadastrados</span><strong id="bebidasDrinksCount">0</strong></div>
+  <div class="card"><span>Margem média</span><strong id="bebidasMargemMedia">0,00%</strong></div>
+</div>
+
+<div class="card drink-cadastro-card">
+  <div class="drink-section-head"><div><h3>🥃 Cadastro de destilados</h3><span class="muted">Cadastre a garrafa para que o sistema calcule automaticamente o custo por ml.</span></div></div>
+  <div class="grid drink-form-grid">
+    <div><label>Destilado</label><input id="bebDestNome" placeholder="Ex.: Gin, Vodka, Whisky"></div>
+    <div><label>Marca</label><input id="bebDestMarca" placeholder="Ex.: Tanqueray"></div>
+    <div><label>Volume da garrafa (ml)</label><input id="bebDestVolume" type="number" min="1" step="1" placeholder="750"></div>
+    <div><label>Preço de compra (R$)</label><input id="bebDestPreco" type="number" min="0" step="0.01" placeholder="120,00"></div>
+    <div><label>Categoria</label><select id="bebDestCategoria"><option>Gin</option><option>Vodka</option><option>Whisky</option><option>Rum</option><option>Tequila</option><option>Cachaça</option><option>Licor</option><option>Vermute</option><option>Outro</option></select></div>
+  </div>
+  <div class="drink-cost-preview">Custo por ml: <strong id="bebDestCustoMl">R$ 0,0000</strong></div>
+  <div class="actions"><button type="button" data-stock-action="1" onclick="addDestilado()">🥃 Cadastrar destilado</button></div>
+  <div id="bebDestTable" class="drink-table-wrap"></div>
+</div>
+
+<div class="card drink-cadastro-card">
+  <div class="drink-section-head"><div><h3>🍹 Ficha técnica do drink</h3><span class="muted">Informe os ingredientes, o rendimento e o preço de venda para calcular o custo e a margem.</span></div></div>
+  <div class="grid drink-form-grid">
+    <div><label>Nome do drink</label><input id="bebDrinkNome" placeholder="Ex.: Gin Tônica"></div>
+    <div><label>Categoria</label><select id="bebDrinkCategoria"><option>Clássico</option><option>Autorais</option><option>Caipirinhas</option><option>Gin</option><option>Whisky</option><option>Tequila</option><option>Sem álcool</option><option>Outro</option></select></div>
+    <div><label>Preço de venda (R$)</label><input id="bebDrinkVenda" type="number" min="0" step="0.01" placeholder="35,00" oninput="renderDrinkPreview()"></div>
+    <div><label>Margem-alvo (%)</label><input id="bebDrinkMargemAlvo" type="number" min="0" max="99.99" step="0.01" value="70" oninput="renderDrinkPreview()"></div>
+    <div><label>Rendimento</label><input id="bebDrinkRendimento" type="number" min="1" step="1" value="1" placeholder="1"></div>
+    <div class="drink-span-2"><label>Descrição / modo de preparo</label><textarea id="bebDrinkDescricao" rows="3" placeholder="Descreva montagem, preparo e apresentação..." ></textarea></div>
+  </div>
+
+  <div class="drink-ingredient-builder">
+    <div class="drink-builder-head"><h4>Ingredientes</h4><span class="muted">O custo é calculado pela quantidade utilizada na receita.</span></div>
+    <div class="drink-add-ingredient">
+      <select id="bebIngTipo" onchange="updateBebIngredientFields()"><option value="destilado">Destilado</option><option value="insumo">Outro insumo</option></select>
+      <select id="bebIngDestilado"></select>
+      <input id="bebIngNome" placeholder="Nome do insumo" style="display:none">
+      <input id="bebIngQtd" type="number" min="0.01" step="0.01" placeholder="Quantidade">
+      <select id="bebIngUn"><option value="ml">ml</option><option value="un">un</option><option value="g">g</option><option value="kg">kg</option><option value="l">L</option></select>
+      <input id="bebIngCusto" type="number" min="0" step="0.0001" placeholder="Custo unitário" style="display:none">
+      <button type="button" data-stock-action="1" onclick="addBebIngredient()">+ Adicionar</button>
+    </div>
+    <div id="bebDrinkIngredientes" class="drink-ingredients-list"></div>
+  </div>
+
+  <div id="bebDrinkPreview" class="drink-profit-preview"></div>
+  <div class="actions"><button type="button" data-stock-action="1" id="bebDrinkSaveBtn" onclick="saveDrink()">🍸 Salvar ficha técnica</button><button type="button" class="secondary" id="bebDrinkCancelBtn" onclick="cancelDrinkEdit()" style="display:none">Cancelar edição</button></div>
+</div>
+
+<div class="card">
+  <div class="drink-list-head"><div><h3>📋 Fichas técnicas cadastradas</h3><span id="bebDrinksCountLabel" class="muted">0 drink(s)</span></div><input id="bebDrinkBusca" placeholder="🔎 Buscar drink ou categoria..." oninput="renderBebidas()"></div>
+  <div id="bebDrinksTable" class="drink-cards-list"></div>
+</div>
+</section>
+
+<section id="inventario" class="view"><div class="page-head"><div><h2>📋 Inventário</h2><div class="muted">Compare o estoque do sistema com a contagem física e registre os ajustes.</div></div><button class="secondary" type="button" onclick="renderInventario()">Atualizar</button></div>
+<div class="card inventory-info"><div><strong>Como funciona</strong><p class="muted">Informe a quantidade encontrada fisicamente. O sistema calcula a diferença e, ao aplicar, ajusta o estoque e registra a movimentação.</p></div><div class="inventory-date"><label>Data do inventário</label><input id="inventarioData" type="date"></div></div>
+<div class="card"><div class="inventory-head"><div><h3>Contagem física</h3><span id="inventarioResumo" class="muted"></span></div><button class="green" type="button" data-stock-action="1" onclick="aplicarInventario()">✓ Aplicar inventário</button></div><div id="inventarioTable" class="inventory-table"></div></div>
+<div class="card"><div class="inventory-head"><div><h3>Histórico de inventários</h3><span id="inventarioHistoricoCount" class="muted"></span></div></div><div id="inventarioHistorico"></div></div></section>
+
+<section id="relatorios" class="view"><div class="page-head"><div><h2>📊 Relatórios</h2><div class="muted">Visão gerencial do estoque, consumo, requisições e compras.</div></div><div class="report-tools"><label>Mês de referência</label><input id="relatorioMes" type="month" onchange="renderRelatorios()"></div></div>
+<div id="relatorioCards" class="grid report-cards"></div>
+<div class="card"><div class="report-section-head"><div><h3>🛒 Sugestão de compras</h3><span class="muted">Calculada com base no estoque ideal cadastrado para cada produto.</span></div><button class="secondary" type="button" onclick="exportSugestaoCompras()">📥 Exportar</button></div><div id="sugestaoComprasTable"></div></div>
+<div class="card"><div class="report-section-head"><div><h3>📦 Estoque</h3><span class="muted">Produtos, situação e valor estimado quando houver custo cadastrado.</span></div></div><div id="relatorioEstoque"></div></div>
+<div class="card"><div class="report-section-head"><div><h3>🔄 Movimentações do mês</h3></div><button class="secondary" type="button" onclick="exportRelatorioMes()">📊 Exportar relatório</button></div><div id="relatorioMovimentos"></div></div>
+<div class="card"><div class="report-section-head"><div><h3>📋 Requisições do mês</h3></div></div><div id="relatorioRequisicoes"></div></div>
+<div class="card"><div class="report-section-head"><div><h3>🧾 Compras especiais</h3><span class="muted">Suco de laranja e gelo.</span></div></div><div id="relatorioCompras"></div></div></section>
+
+<section id="auditoria" class="view"><div class="page-head"><div><h2>🛡️ Auditoria</h2><div class="muted">Histórico das principais ações realizadas no sistema.</div></div><div class="audit-tools"><input id="auditoriaBusca" placeholder="Buscar ação, usuário ou detalhe..." oninput="renderAuditoria()"><select id="auditoriaTipo" onchange="renderAuditoria()"><option value="">Todos os tipos</option><option>Login</option><option>Produto</option><option>Requisição</option><option>Movimentação</option><option>Compra</option><option>Inventário</option><option>Usuário</option><option>Sistema</option></select></div></div>
+<div class="card"><div class="report-section-head"><div><h3>Registro de atividades</h3><span id="auditoriaCount" class="muted"></span></div><button class="secondary" type="button" onclick="exportAuditoria()">📥 Exportar auditoria</button></div><div id="auditoriaTable"></div></div></section>
+
+<section id="usuarios" class="view" data-admin-only="1"><h2>Usuários</h2>
+<div class="card"><h3 id="userFormTitle">Cadastrar usuário</h3><div class="grid"><div><label>Nome</label><input id="uNome"></div><div><label>Usuário</label><input id="uLogin"></div><div><label>Senha</label><input id="uSenha" type="password" placeholder="Senha de acesso"></div><div><label>Perfil</label><select id="uPerfil"><option>Administrador</option><option>Estoquista</option><option>Consulta</option></select></div></div><div class="actions"><button id="userSaveBtn" onclick="addUser()">Adicionar usuário</button><button id="userCancelBtn" class="secondary" onclick="cancelEditUser()" style="display:none">Cancelar edição</button></div></div>
+<div class="card"><div id="userTable"></div></div></section>
+
+<section id="menu" class="view"><h2>Menu</h2>
+<div class="card"><h3>💾 Backup offline</h3><p class="muted">Faça uma cópia completa dos dados do sistema diretamente no seu celular ou computador. O backup não depende de internet, servidor ou Supabase.</p><div class="actions"><button class="green" onclick="fazerBackupOffline()">⬇️ Fazer backup completo</button><button class="secondary" onclick="document.getElementById('backupFileInput').click()">⬆️ Restaurar backup</button><input id="backupFileInput" type="file" accept="application/json,.json" style="display:none" onchange="restaurarBackupOffline(event)"></div><div class="backup-status" id="backupStatus">📱 Os dados atuais estão armazenados localmente neste dispositivo.</div></div>
+<div class="card"><h3>📊 Exportação</h3><p class="muted">Exporte todas as entradas e saídas para uma planilha compatível com Excel.</p><div class="actions"><button class="green" onclick="exportCSV()">📊 Exportar entradas e saídas para Excel</button><button class="secondary" onclick="exportAll()">📁 Exportar dados completos</button></div></div>
+<div class="card"><h3>Dados</h3>
+<button class="danger" onclick="deleteAllMovements()">Apagar todas as entradas e saídas</button>
+<span class="muted" style="display:block;margin-top:8px">🔒 Apenas Administrador pode apagar todas as movimentações, inclusive as vinculadas a requisições.</span><button id="resetDataBtn" class="danger" onclick="resetData()">Apagar todos os dados</button><span id="resetDataLocked" class="muted" style="display:none">🔒 Apenas Administrador pode apagar todos os dados.</span></div>
+<div class="card"><h3>Sobre o sistema</h3><p style="margin:0 0 8px"><strong>Desenvolvido por:</strong> João Azevedo</p><p style="margin:0"><strong>Contato:</strong> azevedojoaoestoque@gmail.com</p></div>
+</section>
+</main>
+<div id="reqModal" class="req-modal" onclick="if(event.target===this)closeReqModal()"><div class="req-sheet">
+<div class="req-sheet-head"><div><div id="reqModalTitle" class="req-sheet-title">REQ-0001</div><div id="reqModalSub" class="req-sheet-sub"></div></div><button class="req-close" type="button" onclick="closeReqModal()">Fechar</button></div>
+<div class="req-info"><div class="req-info-grid"><div class="req-info-block"><label>Status</label><strong id="reqModalStatus" class="req-modal-status"></strong></div><div class="req-info-block"><label>Prioridade</label><strong id="reqModalPriority"></strong></div><div class="req-info-block"><label>Data</label><strong id="reqModalDate"></strong></div><div class="req-info-block"><label>Setor</label><strong id="reqModalSetor"></strong></div></div></div>
+<div class="req-items-wrap"><table class="req-detail-table"><thead><tr><th>Setor</th><th>Item</th><th>Solicitado</th><th>Entregue</th><th>Diferença</th></tr></thead><tbody id="reqModalItems"></tbody></table></div>
+<div class="req-actions"><button type="button" class="req-orange" onclick="changeReqStatus('Separando')">Marcar Separando</button><button type="button" class="req-green" onclick="changeReqStatus('Entregue')">Ajustar / Confirmar entrega</button><button type="button" class="req-red" onclick="changeReqStatus('Pendente')">Cancelar</button><button type="button" class="req-red" onclick="deleteCurrentReq()">Mover para Lixeira</button></div>
+</div></div>
+<script src="script.js"></script>
+</body></html>
