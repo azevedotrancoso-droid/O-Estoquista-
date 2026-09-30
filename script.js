@@ -4,6 +4,7 @@
    ========================================================= */
 const SUPABASE_URL="https://qhqpasthwgysdjkeqnjt.supabase.co";
 const SUPABASE_PUBLISHABLE_KEY="sb_publishable_Bh_yKtGCsd_Iam3DSFXT7Q_Io3t-xUu";
+const SUPABASE_USER_FUNCTION="bright-worker";
 const supabaseClient=window.supabase?.createClient
   ? window.supabase.createClient(SUPABASE_URL,SUPABASE_PUBLISHABLE_KEY,{auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:true}})
   : null;
@@ -151,9 +152,15 @@ async function login(){
     if(err){err.textContent="Não foi possível carregar o servidor online.";err.style.display="block";}
     return;
   }
-  const emailMap={admin:"admin@oestoquista.com"};
-  const email=emailMap[user.toLowerCase()]||user;
+  let email=user;
   try{
+    if(!user.includes("@")){
+      const {data:profileLookup,error:lookupError}=await supabaseClient.from("profiles")
+        .select("email,ativo").eq("login",user.toLowerCase()).maybeSingle();
+      if(lookupError)throw lookupError;
+      if(!profileLookup?.email || profileLookup.ativo===false)throw new Error("Usuário não encontrado ou inativo.");
+      email=profileLookup.email;
+    }
     const {data,error}=await supabaseClient.auth.signInWithPassword({email,password:pass});
     if(error)throw error;
     await syncCloudAfterLogin(data.user);
@@ -428,9 +435,9 @@ function render(){
   renderAuditoria();
   const userRows=db.users.map(u=>{
     const actions=u.login==="admin"?'<span class="muted">🔒 Principal</span>':(canDelete()?`<div class="actions"><button class="action-btn" onclick="editUser('${u.id}')">✏️ Editar</button><button class="trash-btn action-btn" onclick="delUser('${u.id}')" title="Excluir usuário" aria-label="Excluir usuário"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M19 6l-1 15H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/></svg>Excluir</button></div>`:`<span class="muted">🔒 Sem permissão</span>`);
-    return `<tr><td>${esc(u.nome)}</td><td>${esc(u.login)}</td><td>${esc(u.perfil)}</td><td>${actions}</td></tr>`;
+    return `<tr><td>${esc(u.nome)}</td><td>${esc(u.login)}</td><td>${esc(u.email||"—")}</td><td>${esc(u.perfil)}</td><td>${actions}</td></tr>`;
   }).join("");
-  userTable.innerHTML=db.users.length?`<div class="product-table-wrap"><table><tr><th>Nome</th><th>Usuário</th><th>Perfil</th><th>Ações</th></tr>${userRows}</table></div>`:"<p class='muted'>Nenhum usuário cadastrado.</p>";
+  userTable.innerHTML=db.users.length?`<div class="product-table-wrap"><table><tr><th>Nome</th><th>Usuário</th><th>E-mail</th><th>Perfil</th><th>Ações</th></tr>${userRows}</table></div>`:"<p class='muted'>Nenhum usuário cadastrado.</p>";
 }
 function id(){return Date.now().toString(36)+Math.random().toString(36).slice(2)}
 function now(){return new Date().toLocaleString("pt-BR")}
@@ -804,18 +811,47 @@ function addMov(){
  mMot.value="";
  save();
 }
-function addUser(){
+async function addUser(){
  if(!isAdmin())return alert("🔒 Apenas o Administrador pode cadastrar usuários.");
+ if(!supabaseClient)return alert("Servidor online indisponível.");
  const nome=document.getElementById("uNome").value.trim();
- const login=document.getElementById("uLogin").value.trim();
+ const login=document.getElementById("uLogin").value.trim().toLowerCase();
+ const email=document.getElementById("uEmail").value.trim().toLowerCase();
  const senha=document.getElementById("uSenha").value;
  const perfil=document.getElementById("uPerfil").value;
- if(!nome||!login)return alert("Informe nome e usuário.");
- if(db.users.some(u=>String(u.login||"").trim().toLowerCase()===login.toLowerCase()))return alert("Esse usuário já está cadastrado.");
- db.users.push({id:id(),nome,login,senha:senha||"1234",perfil});
- registrarAuditoria("Usuário","Criou usuário",`${nome} · ${login} · Perfil: ${perfil}`);
- document.getElementById("uNome").value="";document.getElementById("uLogin").value="";document.getElementById("uSenha").value="";
- save();
+ if(!nome||!login||!email||!senha)return alert("Informe nome, usuário, e-mail e senha.");
+ if(login.length<3)return alert("O usuário deve ter pelo menos 3 caracteres.");
+ if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))return alert("Informe um e-mail válido.");
+ if(senha.length<6)return alert("A senha deve ter pelo menos 6 caracteres.");
+ if(!["Administrador","Estoquista","Consulta"].includes(perfil))return alert("Perfil inválido.");
+ if(db.users.some(u=>String(u.login||"").trim().toLowerCase()===login))return alert("Esse usuário já está cadastrado.");
+ if(db.users.some(u=>String(u.email||"").trim().toLowerCase()===email))return alert("Esse e-mail já está cadastrado.");
+ const btn=document.getElementById("userSaveBtn");
+ const oldText=btn?.textContent;
+ if(btn){btn.disabled=true;btn.textContent="Criando usuário...";}
+ try{
+   const {data,error}=await supabaseClient.functions.invoke(SUPABASE_USER_FUNCTION,{
+     body:{nome,login,email,senha,perfil}
+   });
+   if(error)throw error;
+   if(!data?.ok||!data?.user)throw new Error(data?.error||"A função não confirmou a criação do usuário.");
+   const created={...data.user,senha:""};
+   db.users.push(created);
+   registrarAuditoria("Usuário","Criou usuário online",`${nome} · ${login} · ${email} · Perfil: ${perfil}`);
+   document.getElementById("uNome").value="";
+   document.getElementById("uLogin").value="";
+   document.getElementById("uEmail").value="";
+   document.getElementById("uSenha").value="";
+   cancelEditUser();
+   save();
+   alert(`Usuário ${login} criado com sucesso.`);
+ }catch(e){
+   console.error("Falha ao criar usuário online:",e);
+   const msg=e?.context?.body?.error||e?.message||"Não foi possível criar o usuário.";
+   alert("❌ "+msg);
+ }finally{
+   if(btn){btn.disabled=false;btn.textContent=oldText||"Adicionar usuário";}
+ }
 }
 function editUser(i){
  if(!isAdmin())return denyDelete();
@@ -823,7 +859,10 @@ function editUser(i){
  if(!u)return alert("Usuário não encontrado.");
  document.getElementById("uNome").value=u.nome||"";
  document.getElementById("uLogin").value=u.login||"";
- document.getElementById("uSenha").value=u.senha||"";
+ document.getElementById("uLogin").readOnly=true;
+ document.getElementById("uEmail").value=u.email||"";
+ document.getElementById("uEmail").readOnly=true;
+ document.getElementById("uSenha").value="";
  document.getElementById("uPerfil").value=u.perfil||"Consulta";
  document.getElementById("userFormTitle").textContent="Editar usuário";
  const btn=document.getElementById("userSaveBtn");btn.textContent="Salvar alterações";btn.onclick=function(){saveUserEdit(i)};
@@ -846,7 +885,7 @@ function saveUserEdit(i){
  cancelEditUser();save();
 }
 function cancelEditUser(){
- document.getElementById("uNome").value="";document.getElementById("uLogin").value="";document.getElementById("uSenha").value="";
+ document.getElementById("uNome").value="";document.getElementById("uLogin").value="";document.getElementById("uLogin").readOnly=false;document.getElementById("uEmail").value="";document.getElementById("uEmail").readOnly=false;document.getElementById("uSenha").value="";
  document.getElementById("uPerfil").value="Administrador";
  document.getElementById("userFormTitle").textContent="Cadastrar usuário";
  const btn=document.getElementById("userSaveBtn");btn.textContent="Adicionar usuário";btn.onclick=addUser;
