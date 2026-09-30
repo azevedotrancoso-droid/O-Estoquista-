@@ -838,63 +838,6 @@ function renderNotas(){const list=document.getElementById('notesList'),count=doc
 function exportNotesPDF(){if(!Array.isArray(db.anotacoes)||!db.anotacoes.length)return alert('Não há anotações para exportar.');renderNotas();window.print();}
 
 function exportCSV(){let rows=[["Data","Produto","Tipo","Quantidade","Unidade","Motivo"] ,...db.mov.map(m=>[m.data,m.prod,m.tipo,m.qtd,m.un,m.motivo])];download("o_estoquista_entradas_saidas.csv",csv(rows))}
-function fazerBackupOffline(){
-  try{
-    normalizarCategoriasProdutos();
-    const backup={
-      formato:'O_ESTOQUISTA_BACKUP',
-      versao:2,
-      aplicativo:'O Estoquista',
-      criadoEm:new Date().toISOString(),
-      dados:JSON.parse(JSON.stringify(db))
-    };
-    const blob=new Blob([JSON.stringify(backup,null,2)],{type:'application/json;charset=utf-8'});
-    const url=URL.createObjectURL(blob);
-    const a=document.createElement('a');
-    const data=new Date();
-    const pad=n=>String(n).padStart(2,'0');
-    a.href=url;a.download=`o_estoquista_backup_${data.getFullYear()}-${pad(data.getMonth()+1)}-${pad(data.getDate())}_${pad(data.getHours())}-${pad(data.getMinutes())}.json`;
-    document.body.appendChild(a);a.click();a.remove();URL.revokeObjectURL(url);
-    const st=document.getElementById('backupStatus');if(st)st.textContent=`✅ Backup criado em ${data.toLocaleString('pt-BR')}. Guarde esse arquivo em um local seguro.`;
-    registrarAuditoria('Sistema','Fez backup offline',`Backup completo criado em ${data.toLocaleString('pt-BR')}`);persist();
-  }catch(e){console.error(e);alert('Não foi possível criar o backup offline.');}
-}
-function restaurarBackupOffline(event){
-  const file=event.target.files?.[0];
-  if(!file)return;
-  const input=event.target;
-  const reader=new FileReader();
-  reader.onload=function(){
-    try{
-      const parsed=JSON.parse(reader.result);
-      const dados=parsed?.formato==='O_ESTOQUISTA_BACKUP'?parsed.dados:parsed;
-      if(!dados||typeof dados!=='object'||Array.isArray(dados))throw new Error('Formato inválido');
-      const obrigatorios=['produtos','req','mov','users'];
-      if(!obrigatorios.every(k=>Array.isArray(dados[k])))throw new Error('Backup incompatível');
-      if(!confirm('Restaurar este backup substituirá os dados atuais deste dispositivo.\n\nFaça um backup atual antes de continuar, se precisar preservá-lo.\n\nDeseja realmente restaurar?'))return;
-      const novo=JSON.parse(JSON.stringify(dados));
-      novo.comprasEspeciais=Array.isArray(novo.comprasEspeciais)?novo.comprasEspeciais:[];
-      novo.auditoria=Array.isArray(novo.auditoria)?novo.auditoria:[];
-      novo.inventarios=Array.isArray(novo.inventarios)?novo.inventarios:[];
-      novo.destilados=Array.isArray(novo.destilados)?novo.destilados:[];
-      novo.drinks=Array.isArray(novo.drinks)?novo.drinks:[];
-      novo.anotacoes=Array.isArray(novo.anotacoes)?novo.anotacoes:[];
-      novo.categorias=Array.isArray(novo.categorias)?novo.categorias:[];
-      db=novo;
-      normalizarCategoriasProdutos();
-      const admin=db.users.find(u=>String(u.login||'').toLowerCase()==='admin');
-      if(!admin){db.users.unshift({id:id(),nome:'Administrador',login:'admin',senha:'1234',perfil:'Administrador'});}
-      registrarAuditoria('Sistema','Restaurou backup offline',`Arquivo: ${file.name}`);
-      if(!persist())throw new Error('Falha ao salvar restauração');
-      sessionStorage.removeItem('o_estoquista_logged');
-      sessionStorage.removeItem('o_estoquista_user');
-      alert('Backup restaurado com sucesso. O sistema será recarregado.');
-      location.reload();
-    }catch(e){console.error(e);alert('Arquivo de backup inválido ou incompatível com O Estoquista. Nenhum dado foi alterado.');}
-    finally{input.value='';}
-  };
-  reader.readAsText(file);
-}
 function exportAll(){let rows=[["CATEGORIAS"],["Categoria"],...(db.categorias||[]).map(c=>[c]),[],["PRODUTOS"],["Nome","Código","Unidade","Categoria","Estoque","Mínimo","Ideal"],...db.produtos.map(p=>[p.nome,p.cod,p.un,p.categoria,p.estoque,p.min,p.ideal]),[],["MOVIMENTAÇÕES"],["Data","Produto","Tipo","Quantidade","Unidade","Motivo"],...db.mov.map(m=>[m.data,m.prod,m.tipo,m.qtd,m.un,m.motivo]),[],["COMPRAS ESPECIAIS"],["Tipo","Data","Quantidade","Unidade","Preço unitário","Total"],...(db.comprasEspeciais||[]).map(x=>[x.tipo,x.data,x.qtd,x.un,x.precoUnitario,x.total]),[],["DESTILADOS"],["Nome","Marca","Categoria","Volume (ml)","Preço compra","Custo/ml"],...(db.destilados||[]).map(d=>[d.nome,d.marca,d.categoria,d.volumeMl,d.preco,d.custoMl]),[],["FICHAS TÉCNICAS DE DRINKS"],["Drink","Categoria","Rendimento","Preço venda","Margem-alvo","Preço sugerido","Custo por drink","Lucro","Margem"],...(db.drinks||[]).map(d=>{const c=drinkCalculos(d);return[d.nome,d.categoria,d.rendimento,d.precoVenda,c.alvo/100,c.precoSugerido,c.custo,c.lucro,c.margem/100]} )];download("o_estoquista_dados.csv",csv(rows))}
 let editingDrinkId=null;
 let bebidaIngredientes=[];

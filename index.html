@@ -247,7 +247,6 @@
 <div class="card"><div id="userTable"></div></div></section>
 
 <section id="menu" class="view"><h2>Menu</h2>
-<div class="card"><h3>💾 Backup offline</h3><p class="muted">Faça uma cópia completa dos dados do sistema diretamente no seu celular ou computador. O backup não depende de internet, servidor ou Supabase.</p><div class="actions"><button class="green" onclick="fazerBackupOffline()">⬇️ Fazer backup completo</button><button class="secondary" onclick="document.getElementById('backupFileInput').click()">⬆️ Restaurar backup</button><input id="backupFileInput" type="file" accept="application/json,.json" style="display:none" onchange="restaurarBackupOffline(event)"></div><div class="backup-status" id="backupStatus">📱 Os dados atuais estão armazenados localmente neste dispositivo.</div></div>
 <div class="card"><h3>📊 Exportação</h3><p class="muted">Exporte todas as entradas e saídas para uma planilha compatível com Excel.</p><div class="actions"><button class="green" onclick="exportCSV()">📊 Exportar entradas e saídas para Excel</button><button class="secondary" onclick="exportAll()">📁 Exportar dados completos</button></div></div>
 <div class="card"><h3>Dados</h3>
 <button class="danger" onclick="deleteAllMovements()">Apagar todas as entradas e saídas</button>
