@@ -1,3 +1,130 @@
+
+/* =========================================================
+   SUPABASE — MODO ONLINE
+   ========================================================= */
+const SUPABASE_URL="https://qhqpasthwgysdjkeqnjt.supabase.co";
+const SUPABASE_PUBLISHABLE_KEY="sb_publishable_Bh_yKtGCsd_Iam3DSFXT7Q_Io3t-xUu";
+const supabaseClient=window.supabase?.createClient
+  ? window.supabase.createClient(SUPABASE_URL,SUPABASE_PUBLISHABLE_KEY,{auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:true}})
+  : null;
+let cloudReady=false;
+let cloudSyncing=false;
+let cloudSaveQueue=Promise.resolve();
+let lastCloudVersion=0;
+
+function cloudPayload(){
+  const copy=JSON.parse(JSON.stringify(db));
+  if(Array.isArray(copy.users)){
+    copy.users=copy.users.map(u=>{
+      const x={...u};
+      delete x.senha;
+      return x;
+    });
+  }
+  return copy;
+}
+function normalizeCloudUsers(){
+  if(!Array.isArray(db.users))db.users=[];
+  db.users.forEach(u=>{if(!Object.prototype.hasOwnProperty.call(u,"senha"))u.senha="";});
+}
+async function cloudLoad(){
+  if(!supabaseClient)throw new Error("Biblioteca do Supabase não carregada.");
+  const {data,error}=await supabaseClient.from("estoquista_state")
+    .select("id,dados,versao,atualizado_em").eq("id",1).single();
+  if(error)throw error;
+  const cloud=data?.dados;
+  if(cloud&&typeof cloud==="object"&&Object.keys(cloud).length){
+    const hasCloudData=Object.entries(cloud).some(([k,v])=>k!=="users"&&Array.isArray(v)&&v.length>0);
+    const hasLocalData=Object.entries(db).some(([k,v])=>k!=="users"&&Array.isArray(v)&&v.length>0);
+    if(hasCloudData||!hasLocalData){
+      db=cloud;
+      if(!Array.isArray(db.users))db.users=[];
+      normalizeCloudUsers();
+    }
+  }
+  lastCloudVersion=Number(data?.versao||0);
+  cloudReady=true;
+  return data;
+}
+async function cloudSave(){
+  if(!cloudReady||!supabaseClient)return;
+  cloudSaveQueue=cloudSaveQueue.then(async()=>{
+    const {data:{user}}=await supabaseClient.auth.getUser();
+    if(!user)return;
+    const {data:row,error:readError}=await supabaseClient.from("estoquista_state")
+      .select("versao").eq("id",1).single();
+    if(readError)throw readError;
+    const nextVersion=Number(row?.versao||0)+1;
+    const {error}=await supabaseClient.from("estoquista_state").update({
+      dados:cloudPayload(),
+      versao:nextVersion,
+      atualizado_por:user.id
+    }).eq("id",1);
+    if(error)throw error;
+    lastCloudVersion=nextVersion;
+  }).catch(e=>console.error("Falha ao sincronizar com Supabase:",e));
+  return cloudSaveQueue;
+}
+async function syncCloudAfterLogin(authUser){
+  await cloudLoad();
+  const {data:profile,error:profileError}=await supabaseClient.from("profiles")
+    .select("id,nome,login,email,perfil,ativo").eq("id",authUser.id).single();
+  if(profileError)throw profileError;
+  if(!profile||profile.ativo===false)throw new Error("Usuário inativo.");
+  if(!Array.isArray(db.users))db.users=[];
+  const cleanProfile={
+    id:profile.id,
+    nome:profile.nome||profile.login||authUser.email||"Usuário",
+    login:profile.login||authUser.email||"usuario",
+    email:profile.email||authUser.email||"",
+    perfil:profile.perfil||"Consulta",
+    ativo:profile.ativo!==false,
+    senha:""
+  };
+  const existing=db.users.find(u=>String(u.id)===String(profile.id)||
+    String(u.login||"").toLowerCase()===String(cleanProfile.login).toLowerCase());
+  if(existing)Object.assign(existing,cleanProfile);else db.users.push(cleanProfile);
+  normalizeCloudUsers();
+  const localHasData=Object.entries(db).some(([k,v])=>k!=="users"&&Array.isArray(v)&&v.length>0);
+  const cloudHasData=Object.entries((await supabaseClient.from("estoquista_state").select("dados").eq("id",1).single()).data?.dados||{})
+    .some(([k,v])=>k!=="users"&&Array.isArray(v)&&v.length>0);
+  if(!cloudHasData&&localHasData)await cloudSave();
+  persistLocalOnly();
+}
+function persistLocalOnly(){
+  try{
+    normalizarCategoriasProdutos();
+    localStorage.setItem(KEY,JSON.stringify(db));
+    return true;
+  }catch(e){console.error("Falha no cache local:",e);return false;}
+}
+async function refreshCloudSilently(){
+  if(!cloudReady||cloudSyncing||!supabaseClient)return;
+  cloudSyncing=true;
+  try{
+    const {data,error}=await supabaseClient.from("estoquista_state")
+      .select("dados,versao,atualizado_em").eq("id",1).single();
+    if(error)throw error;
+    const version=Number(data?.versao||0);
+    if(version>lastCloudVersion && data?.dados){
+      const active=document.querySelector(".view.active")?.id||"inicio";
+      db=data.dados;
+      if(!Array.isArray(db.users))db.users=[];
+      normalizeCloudUsers();
+      lastCloudVersion=version;
+      persistLocalOnly();
+      render();
+      const activeView=document.getElementById(active);
+      if(activeView){
+        document.querySelectorAll(".view").forEach(v=>v.classList.remove("active"));
+        activeView.classList.add("active");
+      }
+      applyPermissions();
+    }
+  }catch(e){console.warn("Sincronização automática indisponível:",e);}
+  finally{cloudSyncing=false;}
+}
+
 function ensureAdmin(){
   if(!Array.isArray(db.users)) db.users=[];
 if(!Array.isArray(db.anotacoes)) db.anotacoes=[];
@@ -12,40 +139,80 @@ if(!Array.isArray(db.anotacoes)) db.anotacoes=[];
     save();
   }
 }
-function login(){
+async function login(){
   const user=(document.getElementById("loginUser").value||"").trim();
   const pass=document.getElementById("loginPass").value||"";
-  const found=db.users.find(u=>String(u.login||"").trim().toLowerCase()===user.toLowerCase() && (u.senha||"1234")===pass);
   const err=document.getElementById("loginError");
-  if(found){
+  if(!user||!pass){
+    if(err){err.textContent="Informe usuário e senha.";err.style.display="block";}
+    return;
+  }
+  if(!supabaseClient){
+    if(err){err.textContent="Não foi possível carregar o servidor online.";err.style.display="block";}
+    return;
+  }
+  const emailMap={admin:"admin@oestoquista.com"};
+  const email=emailMap[user.toLowerCase()]||user;
+  try{
+    const {data,error}=await supabaseClient.auth.signInWithPassword({email,password:pass});
+    if(error)throw error;
+    await syncCloudAfterLogin(data.user);
+    const profile=db.users.find(u=>String(u.id)===String(data.user.id))||
+      db.users.find(u=>String(u.login||"").toLowerCase()===user.toLowerCase())||
+      db.users.find(u=>String(u.email||"").toLowerCase()===String(email).toLowerCase());
+    if(!profile||profile.ativo===false)throw new Error("Perfil não encontrado ou inativo.");
     sessionStorage.setItem("o_estoquista_logged","1");
-    sessionStorage.setItem("o_estoquista_user",found.login);
-    registrarAuditoria("Login","Entrada no sistema",`Usuário: ${found.login}`);
+    sessionStorage.setItem("o_estoquista_user",profile.login||user);
+    registrarAuditoria("Login","Entrada no sistema",`Usuário: ${profile.login||user}`);
     persist();
     document.getElementById("loginScreen").style.display="none";
     if(err)err.style.display="none";
     render();
-  }else{
-    if(err)err.style.display="block";
+  }catch(e){
+    console.error("Falha no login online:",e);
+    if(err){
+      err.textContent="Usuário ou senha inválidos, ou não foi possível conectar ao servidor.";
+      err.style.display="block";
+    }
     document.getElementById("loginPass").value="";
     document.getElementById("loginPass").focus();
   }
 }
-function logout(){
+async function logout(){
+  try{if(supabaseClient)await supabaseClient.auth.signOut();}catch(e){console.warn(e);}
   sessionStorage.removeItem("o_estoquista_logged");
   sessionStorage.removeItem("o_estoquista_user");
   location.reload();
 }
-function checkLogin(){
-  const logged=sessionStorage.getItem("o_estoquista_logged")==="1";
-  const login=(sessionStorage.getItem("o_estoquista_user")||"").trim();
-  const valid=logged && !!login && db.users.some(u=>String(u.login||"").trim().toLowerCase()===login.toLowerCase());
-  if(!valid){
+async function checkLogin(){
+  const screen=document.getElementById("loginScreen");
+  if(!supabaseClient){
+    if(screen)screen.style.display="flex";
+    return false;
+  }
+  const {data}=await supabaseClient.auth.getSession();
+  const session=data?.session;
+  if(!session){
     sessionStorage.removeItem("o_estoquista_logged");
     sessionStorage.removeItem("o_estoquista_user");
+    if(screen)screen.style.display="flex";
+    return false;
   }
-  const screen=document.getElementById("loginScreen");
-  if(screen)screen.style.display=valid?"none":"flex";
+  try{
+    await syncCloudAfterLogin(session.user);
+    const profile=db.users.find(u=>String(u.id)===String(session.user.id))||
+      db.users.find(u=>String(u.email||"").toLowerCase()===String(session.user.email||"").toLowerCase());
+    if(profile&&profile.ativo!==false){
+      sessionStorage.setItem("o_estoquista_logged","1");
+      sessionStorage.setItem("o_estoquista_user",profile.login||session.user.email);
+      if(screen)screen.style.display="none";
+      render();
+      return true;
+    }
+  }catch(e){console.error("Falha ao restaurar sessão:",e);}
+  try{await supabaseClient.auth.signOut();}catch(e){}
+  if(screen)screen.style.display="flex";
+  return false;
 }
 
 function currentUser(){
@@ -126,10 +293,11 @@ function persist(){
   try{
     normalizarCategoriasProdutos();
     localStorage.setItem(KEY,JSON.stringify(db));
+    if(cloudReady)cloudSave();
     return true;
   }catch(e){
     console.error("Falha ao salvar os dados do O Estoquista:",e);
-    alert("Não foi possível salvar os dados no navegador. Verifique o espaço disponível e tente novamente.");
+    alert("Não foi possível preparar os dados para salvamento.");
     return false;
   }
 }
@@ -969,6 +1137,20 @@ updateEmprestimoUnit();renderEmprestimoDraft();
 if(document.getElementById("inventarioData")) document.getElementById("inventarioData").value=hojeISO();
 if(document.getElementById("relatorioMes")) document.getElementById("relatorioMes").value=mesAtualISO();
 
-document.addEventListener("DOMContentLoaded",function(){
-  try{ensureAdmin();if(document.getElementById("noteData"))document.getElementById("noteData").value=hojeISO();checkLogin();if(document.getElementById("bebDestVolume")){["bebDestVolume","bebDestPreco"].forEach(x=>document.getElementById(x).addEventListener("input",updateBebDestCost));updateBebIngredientFields();renderBebIngredientes();renderDrinkPreview();}}catch(e){console.error(e);}
+document.addEventListener("DOMContentLoaded",async function(){
+  try{
+    ensureAdmin();
+    if(document.getElementById("noteData"))document.getElementById("noteData").value=hojeISO();
+    if(document.getElementById("bebDestVolume")){
+      ["bebDestVolume","bebDestPreco"].forEach(x=>document.getElementById(x).addEventListener("input",updateBebDestCost));
+      updateBebDestCost();
+      updateBebIngredientFields();
+      renderBebIngredientes();
+      renderDrinkPreview();
+    }
+    const logged=await checkLogin();
+    if(logged){
+      setInterval(refreshCloudSilently,30000);
+    }
+  }catch(e){console.error("Falha ao iniciar O Estoquista:",e);}
 });
