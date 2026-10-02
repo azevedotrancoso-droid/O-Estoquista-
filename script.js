@@ -830,10 +830,38 @@ async function addUser(){
  const oldText=btn?.textContent;
  if(btn){btn.disabled=true;btn.textContent="Criando usuário...";}
  try{
-   const {data,error}=await supabaseClient.functions.invoke(SUPABASE_USER_FUNCTION,{
-     body:{nome,login,email,senha,perfil}
+   // Atualiza a sessão antes da chamada para garantir um JWT válido.
+   const {data:sessionData,error:sessionError}=await supabaseClient.auth.getSession();
+   if(sessionError)throw sessionError;
+   let session=sessionData?.session||null;
+   if(!session){
+     const refreshed=await supabaseClient.auth.refreshSession();
+     if(refreshed.error)throw refreshed.error;
+     session=refreshed.data?.session||null;
+   }
+   if(!session?.access_token)throw new Error("Sessão do administrador não encontrada. Faça login novamente.");
+
+   // Chamada HTTP direta: envia explicitamente o JWT do administrador
+   // no Authorization e a chave pública no apikey.
+   const functionUrl=`${SUPABASE_URL}/functions/v1/${SUPABASE_USER_FUNCTION}`;
+   const response=await fetch(functionUrl,{
+     method:"POST",
+     headers:{
+       "Content-Type":"application/json",
+       "Authorization":`Bearer ${session.access_token}`,
+       "apikey":SUPABASE_PUBLISHABLE_KEY
+     },
+     body:JSON.stringify({nome,login,email,senha,perfil})
    });
-   if(error)throw error;
+
+   const responseText=await response.text();
+   let data=null;
+   try{data=responseText?JSON.parse(responseText):null;}catch(_e){data=null;}
+
+   if(!response.ok){
+     const serverMessage=data?.error||data?.message||responseText||`HTTP ${response.status}`;
+     throw new Error(`Erro ${response.status} ao criar usuário: ${serverMessage}`);
+   }
    if(!data?.ok||!data?.user)throw new Error(data?.error||"A função não confirmou a criação do usuário.");
    const created={...data.user,senha:""};
    db.users.push(created);
