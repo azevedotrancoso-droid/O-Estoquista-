@@ -87,8 +87,8 @@ function toggleLoginPass(){
 <div><label>Código</label><input id="pCod" placeholder="Código"></div>
 <div><label>Unidade de medida</label><select id="pUn"><option>UN</option><option>CX</option><option>FD</option><option>KG</option><option>L</option><option>ML</option><option>PCT</option></select></div>
 <div><label>Categoria</label><select id="pCategoria"><option value="">Selecione a categoria</option></select></div>
-<div><label>Estoque inicial</label><input id="pEst" type="number" min="0" value="0"></div>
-<div><label>Estoque mínimo</label><input id="pMin" type="number" min="0" value="0"></div><div><label>Estoque ideal</label><input id="pIdeal" type="number" min="0" value="0"></div>
+<div><label>Estoque inicial</label><input id="pEst" type="number" min="0" step="any" value="0" inputmode="decimal"></div>
+<div><label>Estoque mínimo</label><input id="pMin" type="number" min="0" step="any" value="0" inputmode="decimal"></div><div><label>Estoque ideal</label><input id="pIdeal" type="number" min="0" step="any" value="0" inputmode="decimal"></div>
 </div><div class="actions"><button data-stock-action="1" onclick="addProduto()">Adicionar produto</button></div>
 <div class="category-create-box"><div><label>Nova categoria</label><input id="novaCategoria" maxlength="60" placeholder="Ex.: Congelados, Hortifruti..."></div><button type="button" data-stock-action="1" onclick="criarCategoria()">＋ Criar categoria</button></div>
 <p class="muted category-help">As categorias criadas ficam salvas no dispositivo e passam a aparecer automaticamente no cadastro, filtros e inventário.</p>
@@ -119,7 +119,7 @@ function toggleLoginPass(){
 <h3>Nova requisição</h3><div class="grid">
 <div><label>Setor</label><select id="rSetor"><option>Bar</option><option>Cozinha</option></select></div>
 <div><label>Prioridade</label><select id="rPrioridade"><option>Normal</option><option>Alta</option><option>Urgente</option></select></div>
-<div><label>Produto</label><select id="rProd"></select></div><div><label>Quantidade</label><input id="rQtd" type="number" min="1" value="1"></div>
+<div><label>Produto</label><select id="rProd"></select></div><div><label>Quantidade</label><input id="rQtd" type="number" min="0.001" step="any" value="1" inputmode="decimal"></div>
 <div><label>Unidade de medida</label><input id="rUn" type="text" readonly placeholder="Automática pelo produto"></div><div><label>Solicitante</label><input id="rSol" placeholder="Nome"></div>
 </div><div class="actions"><button type="button" data-stock-action="1" onclick="addReqItem()">Adicionar item</button><button type="button" class="green" data-stock-action="1" onclick="addReq()">Criar requisição</button></div><div id="reqDraftItems" class="req-items-box"></div></div>
 </section>
@@ -136,7 +136,7 @@ function toggleLoginPass(){
 <h3>Novo empréstimo</h3><div class="grid">
 <div><label>Para quem está sendo emprestado</label><input id="ePessoa" placeholder="Nome da pessoa / setor"></div>
 <div><label>Data do empréstimo</label><input id="eData" type="date"></div>
-<div><label>Produto</label><select id="eProd"></select></div><div><label>Quantidade</label><input id="eQtd" type="number" min="1" value="1"></div>
+<div><label>Produto</label><select id="eProd"></select></div><div><label>Quantidade</label><input id="eQtd" type="number" min="0.001" step="any" value="1" inputmode="decimal"></div>
 <div><label>Unidade de medida</label><input id="eUn" type="text" readonly placeholder="Automática pelo produto"></div>
 <div><label>Observação</label><input id="eObs" placeholder="Opcional"></div>
 </div><div class="actions"><button type="button" data-stock-action="1" onclick="addEmprestimoItem()">Adicionar item</button><button type="button" class="green" data-stock-action="1" onclick="addEmprestimo()">Registrar empréstimo</button></div><div id="emprestimoDraftItems" class="req-items-box"></div></div>
@@ -156,7 +156,7 @@ function toggleLoginPass(){
 <div class="mov-page-head"><div><h2>Entradas e Saídas</h2><div class="mov-count">Registre e acompanhe todas as movimentações do estoque</div></div></div>
 <div class="card mov-form-card"><h3>Lançar movimento</h3><div class="grid">
 <div><label>Categoria</label><select id="mCategoria" onchange="filtrarProdutosMovimento()"></select></div><div><label>Produto</label><select id="mProd"></select></div><div><label>Tipo</label><select id="mTipo"><option value="entrada">Entrada</option><option value="saida">Saída</option></select></div>
-<div><label>Quantidade</label><input id="mQtd" type="number" min="1" value="1"></div><div><label>Data</label><input id="mData" type="date"></div><div><label>Setor</label><select id="mSetor"><option value="Bar">Bar</option><option value="Cozinha">Cozinha</option></select></div><div><label>Classificação</label><select id="mClassificacao"><option value="consumo">Consumo</option><option value="desvio">Desvio</option></select></div><div><label>Motivo</label><input id="mMot" placeholder="Compra, ajuste, perda..."></div>
+<div><label>Quantidade</label><input id="mQtd" type="number" min="0.001" step="any" value="1" inputmode="decimal"></div><div><label>Data</label><input id="mData" type="date"></div><div><label>Setor</label><select id="mSetor"><option value="Bar">Bar</option><option value="Cozinha">Cozinha</option></select></div><div><label>Classificação</label><select id="mClassificacao"><option value="consumo">Consumo</option><option value="desvio">Desvio</option></select></div><div><label>Motivo</label><input id="mMot" placeholder="Compra, ajuste, perda..."></div>
 </div><div class="actions"><button class="mov-launch" data-stock-action="1" onclick="addMov()">Lançar movimento</button></div></div>
 <div class="card mov-list-card">
 <div class="mov-list-card-head"><div><h3>Histórico de movimentações</h3><span id="movCountLabel"></span></div>

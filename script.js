@@ -47,23 +47,55 @@ async function cloudLoad(){
   cloudReady=true;
   return data;
 }
+let cloudSavePendentes=0;
+async function cloudResolverConflito(){
+  // Outro aparelho salvou antes: carrega a versão mais nova da nuvem para não apagar o trabalho dele.
+  const {data,error}=await supabaseClient.from("estoquista_state")
+    .select("dados,versao").eq("id",1).single();
+  if(error)throw error;
+  if(data?.dados&&typeof data.dados==="object"){
+    const active=document.querySelector(".view.active")?.id||"inicio";
+    db=data.dados;
+    if(!Array.isArray(db.users))db.users=[];
+    normalizeCloudUsers();
+    lastCloudVersion=Number(data.versao||0);
+    persistLocalOnly();
+    try{
+      render();
+      const activeView=document.getElementById(active);
+      if(activeView){
+        document.querySelectorAll(".view").forEach(v=>v.classList.remove("active"));
+        activeView.classList.add("active");
+      }
+      applyPermissions();
+    }catch(e){console.warn("Falha ao redesenhar após conflito:",e);}
+  }
+  alert("⚠️ Outra pessoa salvou alterações enquanto você trabalhava.\n\nOs dados foram atualizados com a versão mais recente. Confira e refaça a última ação, se ela não aparecer.");
+}
 async function cloudSave(){
   if(!cloudReady||!supabaseClient)return;
+  cloudSavePendentes++;
   cloudSaveQueue=cloudSaveQueue.then(async()=>{
     const {data:{user}}=await supabaseClient.auth.getUser();
     if(!user)return;
     const {data:row,error:readError}=await supabaseClient.from("estoquista_state")
       .select("versao").eq("id",1).single();
     if(readError)throw readError;
-    const nextVersion=Number(row?.versao||0)+1;
-    const {error}=await supabaseClient.from("estoquista_state").update({
+    const versaoNuvem=Number(row?.versao||0);
+    if(versaoNuvem!==lastCloudVersion){await cloudResolverConflito();return;}
+    const nextVersion=versaoNuvem+1;
+    const {data:atualizado,error}=await supabaseClient.from("estoquista_state").update({
       dados:cloudPayload(),
       versao:nextVersion,
       atualizado_por:user.id
-    }).eq("id",1);
+    }).eq("id",1).eq("versao",versaoNuvem).select("versao");
     if(error)throw error;
+    if(!atualizado||!atualizado.length){await cloudResolverConflito();return;}
     lastCloudVersion=nextVersion;
-  }).catch(e=>console.error("Falha ao sincronizar com Supabase:",e));
+  }).catch(e=>{
+    console.error("Falha ao sincronizar com Supabase:",e);
+    alert("❌ Não foi possível salvar na nuvem. Verifique a conexão e tente novamente.\n\nSuas alterações ficaram apenas neste aparelho.");
+  }).finally(()=>{cloudSavePendentes=Math.max(0,cloudSavePendentes-1);});
   return cloudSaveQueue;
 }
 async function syncCloudAfterLogin(authUser){
@@ -99,8 +131,14 @@ function persistLocalOnly(){
     return true;
   }catch(e){console.error("Falha no cache local:",e);return false;}
 }
+let cloudTimer=null;
+function iniciarSincronizacaoAutomatica(){
+  if(cloudTimer)return;
+  cloudTimer=setInterval(refreshCloudSilently,30000);
+  document.addEventListener("visibilitychange",()=>{if(!document.hidden)refreshCloudSilently();});
+}
 async function refreshCloudSilently(){
-  if(!cloudReady||cloudSyncing||!supabaseClient)return;
+  if(!cloudReady||cloudSyncing||cloudSavePendentes>0||!supabaseClient)return;
   cloudSyncing=true;
   try{
     const {data,error}=await supabaseClient.from("estoquista_state")
@@ -133,10 +171,10 @@ if(!Array.isArray(db.anotacoes)) db.anotacoes=[];
   if(adminUser){
     adminUser.login="admin";
     adminUser.perfil="Administrador";
-    if(!adminUser.senha)adminUser.senha="1234";
+    if(!adminUser.senha)adminUser.senha="";
     save();
   } else {
-    db.users.push({id:Date.now(),nome:"Administrador",login:"admin",senha:"1234",perfil:"Administrador"});
+    db.users.push({id:Date.now(),nome:"Administrador",login:"admin",senha:"",perfil:"Administrador"});
     save();
   }
 }
@@ -172,6 +210,7 @@ async function login(){
     document.getElementById("loginScreen").style.display="none";
     if(err)err.style.display="none";
     render();
+    iniciarSincronizacaoAutomatica();
   }catch(e){
     console.error("Falha no login online:",e);
     if(err){
@@ -438,6 +477,7 @@ function render(){
   }).join("");
   userTable.innerHTML=db.users.length?`<div class="product-table-wrap"><table><tr><th>Nome</th><th>Usuário</th><th>E-mail</th><th>Perfil</th><th>Ações</th></tr>${userRows}</table></div>`:"<p class='muted'>Nenhum usuário cadastrado.</p>";
 }
+function arred(n){return Math.round((Number(n)||0)*1000)/1000}
 function id(){return Date.now().toString(36)+Math.random().toString(36).slice(2)}
 function now(){return new Date().toLocaleString("pt-BR")}
 
@@ -564,9 +604,9 @@ function reqNextNumber(){
 function addReqItem(){
   if(!canEditStock())return denyOperate();
   const p=db.produtos.find(x=>String(x.id)===String(rProd.value)), q=+rQtd.value;
-  if(!p||q<1)return alert('Selecione produto e quantidade.');
+  if(!p||!Number.isFinite(q)||q<=0)return alert('Selecione produto e quantidade.');
   const existente=reqItens.find(x=>x.prodId===p.id);
-  const un=p.un||'UN'; if(existente){existente.qtd+=q;existente.un=un;} else reqItens.push({prodId:p.id,prod:p.nome,qtd:q,un,categoria:rSetor.value});
+  const un=p.un||'UN'; if(existente){existente.qtd=arred(existente.qtd+q);existente.un=un;} else reqItens.push({prodId:p.id,prod:p.nome,qtd:q,un,categoria:rSetor.value});
   rQtd.value=1; renderReqDraft();
 }
 function renderReqDraft(){
@@ -588,10 +628,10 @@ function emprestimoNextNumber(){const nums=db.emprestimos.map(x=>parseInt(String
 function addEmprestimoItem(){
  if(!canEditStock())return denyOperate();
  const p=db.produtos.find(x=>String(x.id)===String(eProd?.value)),q=Number(document.getElementById('eQtd')?.value||0);
- if(!p||q<1)return alert('Selecione um produto e informe uma quantidade válida.');
+ if(!p||!Number.isFinite(q)||q<=0)return alert('Selecione um produto e informe uma quantidade válida.');
  if(Number(p.estoque)<q)return alert(`Estoque insuficiente. Disponível: ${p.estoque} ${p.un}.`);
  const existente=emprestimoItens.find(x=>String(x.prodId)===String(p.id));
- if(existente){if(p.estoque<existente.qtd+q)return alert(`Estoque insuficiente. Disponível: ${p.estoque} ${p.un}.`);existente.qtd+=q;}else emprestimoItens.push({prodId:p.id,prod:p.nome,qtd:q,un:p.un});
+ if(existente){if(p.estoque<existente.qtd+q)return alert(`Estoque insuficiente. Disponível: ${p.estoque} ${p.un}.`);existente.qtd=arred(existente.qtd+q);}else emprestimoItens.push({prodId:p.id,prod:p.nome,qtd:q,un:p.un});
  document.getElementById('eQtd').value=1;renderEmprestimoDraft();
 }
 function renderEmprestimoDraft(){const box=document.getElementById('emprestimoDraftItems');if(!box)return;if(!emprestimoItens.length){box.innerHTML='<p class="muted">Nenhum produto adicionado ao empréstimo.</p>';return;}box.innerHTML=emprestimoItens.map((it,i)=>`<div class="req-draft-item"><div><b>${esc(it.prod)}</b><small>${it.qtd} ${esc(it.un)}</small></div><button class="req-draft-remove" type="button" onclick="emprestimoItens.splice(${i},1);renderEmprestimoDraft()">Remover</button></div>`).join('');}
@@ -602,12 +642,12 @@ function addEmprestimo(){
  if(!emprestimoItens.length)return alert('Adicione pelo menos um produto ao empréstimo.');
  for(const it of emprestimoItens){const p=db.produtos.find(x=>String(x.id)===String(it.prodId));if(!p||Number(p.estoque)<Number(it.qtd))return alert(`Estoque insuficiente para ${it.prod}.`);}
  const emp={id:id(),numero:emprestimoNextNumber(),data,dataCriado:now(),pessoa,obs,status:'Pendente',itens:emprestimoItens.map(x=>({...x}))};
- emp.itens.forEach(it=>{const p=db.produtos.find(x=>String(x.id)===String(it.prodId));p.estoque-=Number(it.qtd);db.mov.push({id:id(),data:emp.data,prodId:p.id,prod:p.nome,tipo:'saida',qtd:Number(it.qtd),un:p.un,motivo:`Empréstimo ${emp.numero} · ${emp.pessoa}`,origem:'emprestimo',emprestimoId:emp.id});});
+ emp.itens.forEach(it=>{const p=db.produtos.find(x=>String(x.id)===String(it.prodId));p.estoque=arred(p.estoque-Number(it.qtd));db.mov.push({id:id(),data:emp.data,prodId:p.id,prod:p.nome,tipo:'saida',qtd:Number(it.qtd),un:p.un,motivo:`Empréstimo ${emp.numero} · ${emp.pessoa}`,origem:'emprestimo',emprestimoId:emp.id});});
  db.emprestimos.unshift(emp);registrarAuditoria('Empréstimo','Registrou empréstimo',`${emp.numero} · Para: ${emp.pessoa} · ${emp.itens.length} item(s)`);emprestimoItens=[];document.getElementById('ePessoa').value='';document.getElementById('eObs').value='';document.getElementById('eQtd').value=1;renderEmprestimoDraft();save();
 }
 function renderPendencias(){
  const box=document.getElementById('pendTable');if(!box)return;const busca=(document.getElementById('pendBusca')?.value||'').toLowerCase().trim(),status=document.getElementById('pendStatusFiltro')?.value||'';const all=(db.emprestimos||[]).slice().reverse();const list=all.filter(x=>(!status||x.status===status)&&(!busca||`${x.numero} ${x.pessoa} ${x.obs||''} ${(x.itens||[]).map(i=>i.prod).join(' ')}`.toLowerCase().includes(busca)));const c=document.getElementById('pendCount');if(c)c.textContent=all.length;if(!list.length){box.innerHTML='<div class="req-empty">Nenhum empréstimo encontrado.</div>';return;}box.innerHTML=list.map(x=>{const pago=x.status==='Pago';return `<div class="req-card pend-card ${pago?'pend-paid':''}"><div class="req-card-top"><div><div class="req-code">${esc(x.numero)}</div><div class="req-meta">👤 ${esc(x.pessoa)} · ${esc(formatDateBR(x.data))}</div></div><span class="req-badge ${pago?'status-entregue':'status-pendente'}">${pago?'Pago':'Pendente'}</span></div><div class="pend-items">${(x.itens||[]).map(i=>`<span>${esc(i.prod)} · ${i.qtd} ${esc(i.un)}</span>`).join('')}</div>${x.obs?`<div class="req-bottom">Obs.: ${esc(x.obs)}</div>`:''}<div class="pend-actions">${!pago&&canEditStock()?`<button class="green" type="button" onclick="marcarEmprestimoPago('${x.id}');event.stopPropagation()">✓ Marcar como pago</button>`:''}${canDelete()?`<button class="danger" type="button" onclick="excluirEmprestimo('${x.id}');event.stopPropagation()">🗑️ Excluir</button>`:''}</div></div>`;}).join('');}
-function marcarEmprestimoPago(i){if(!canEditStock())return denyOperate();const e=db.emprestimos.find(x=>String(x.id)===String(i));if(!e||e.status==='Pago')return;if(!confirm(`Marcar ${e.numero} como pago/devolvido?\n\nOs produtos serão devolvidos ao estoque.`))return;for(const it of e.itens||[]){const p=db.produtos.find(x=>String(x.id)===String(it.prodId));if(p){p.estoque+=Number(it.qtd);db.mov.push({id:id(),data:hojeISO(),prodId:p.id,prod:p.nome,tipo:'entrada',qtd:Number(it.qtd),un:p.un,motivo:`Devolução ${e.numero} · ${e.pessoa}`,origem:'emprestimo_devolucao',emprestimoId:e.id});}}e.status='Pago';e.pagoEm=now();registrarAuditoria('Empréstimo','Marcou como pago/devolvido',`${e.numero} · ${e.pessoa}`);save();}
+function marcarEmprestimoPago(i){if(!canEditStock())return denyOperate();const e=db.emprestimos.find(x=>String(x.id)===String(i));if(!e||e.status==='Pago')return;if(!confirm(`Marcar ${e.numero} como pago/devolvido?\n\nOs produtos serão devolvidos ao estoque.`))return;for(const it of e.itens||[]){const p=db.produtos.find(x=>String(x.id)===String(it.prodId));if(p){p.estoque=arred(p.estoque+Number(it.qtd));db.mov.push({id:id(),data:hojeISO(),prodId:p.id,prod:p.nome,tipo:'entrada',qtd:Number(it.qtd),un:p.un,motivo:`Devolução ${e.numero} · ${e.pessoa}`,origem:'emprestimo_devolucao',emprestimoId:e.id});}}e.status='Pago';e.pagoEm=now();registrarAuditoria('Empréstimo','Marcou como pago/devolvido',`${e.numero} · ${e.pessoa}`);save();}
 function excluirEmprestimo(i){if(!canDelete())return denyDelete();const e=db.emprestimos.find(x=>String(x.id)===String(i));if(!e)return;if(e.status!=='Pago')return alert('Só é possível excluir um empréstimo depois de marcar como pago/devolvido.');if(!confirm(`Excluir ${e.numero}? O histórico de estoque será mantido.`))return;registrarAuditoria('Empréstimo','Excluiu empréstimo',`${e.numero} · ${e.pessoa}`);db.emprestimos=db.emprestimos.filter(x=>String(x.id)!==String(i));save();}
 function limparFiltrosPendencias(){['pendBusca','pendStatusFiltro'].forEach(i=>{const e=document.getElementById(i);if(e)e.value='';});renderPendencias();}
 
@@ -689,10 +729,10 @@ function changeReqStatus(status){
       const p=getReqProduct(item);
       if(!p){alert('Não foi possível localizar o produto "'+String(item.prod||'')+'" no estoque.');return;}
       if(!Number.isFinite(qtd)||qtd<0||qtd>Number(item.qtd)){alert(`Quantidade entregue inválida para ${item.prod}.`);return;}
-      if(p.estoque<qtd){alert('Estoque insuficiente para entregar a requisição.\n\nProduto: '+p.nome+'\nDisponível: '+p.estoque+' '+p.un+'\nEntregue: '+qtd+' '+p.un);return;}
+      if(arred(p.estoque)<arred(qtd)){alert('Estoque insuficiente para entregar a requisição.\n\nProduto: '+p.nome+'\nDisponível: '+p.estoque+' '+p.un+'\nEntregue: '+qtd+' '+p.un);return;}
     }
     entregas.forEach(({item,qtd})=>{
-      const p=getReqProduct(item); p.estoque-=qtd; item.entregue=qtd;
+      const p=getReqProduct(item); p.estoque=arred(p.estoque-qtd); item.entregue=qtd;
       if(qtd>0)db.mov.push({id:id(),data:hojeISO(),prodId:p.id,prod:p.nome,tipo:'saida',qtd:qtd,un:p.un,motivo:'Requisição '+(r.numero||r.id),origem:'requisicao',reqId:r.id});
     });
   }
@@ -811,12 +851,12 @@ function addMov(){
  let p=db.produtos.find(x=>String(x.id)===String(mProd.value)),q=Number(mQtd.value),tipo=mTipo.value;
  const setor=document.getElementById('mSetor')?.value||'Bar';
  const classificacao=document.getElementById('mClassificacao')?.value||'consumo';
- if(!p||!Number.isFinite(q)||q<1)return alert("Selecione produto e informe uma quantidade válida.");
+ if(!p||!Number.isFinite(q)||q<=0)return alert("Selecione produto e informe uma quantidade válida.");
  if(!["entrada","saida"].includes(tipo))return alert("Tipo de movimento inválido.");
  if(!mData.value)return alert("Selecione a data do movimento.");
  if(tipo==="saida"&&p.estoque<q)return alert("Estoque insuficiente.");
  const classe=tipo==='entrada'?'consumo':classificacao;
- p.estoque+=tipo==="entrada"?q:-q;
+ p.estoque=arred(p.estoque+(tipo==="entrada"?q:-q));
  db.mov.push({id:id(),data:mData.value,prodId:p.id,prod:p.nome,tipo,qtd:q,un:p.un,motivo:mMot.value.trim(),setor:tipo==='saida'?setor:'',classificacao:classe});
  registrarAuditoria("Movimentação",mTipo.value==="entrada"?"Lançou entrada":"Lançou saída",`${p.nome} · ${q} ${p.un} · ${mMot.value.trim()||"Sem motivo"} · ${tipo==='saida'?setor+' · '+(classe==='desvio'?'Desvio':'Consumo'):''} · Data: ${mData.value}`);
  mMot.value="";
@@ -908,20 +948,60 @@ function editUser(i){
  document.getElementById("userCancelBtn").style.display="inline-block";
  document.getElementById("uNome").focus();
 }
-function saveUserEdit(i){
+async function chamarGerenciarUsuarios(payload){
+  if(!supabaseClient)throw new Error("Servidor online indisponível.");
+  const {data:sessionData,error:sessionError}=await supabaseClient.auth.getSession();
+  if(sessionError)throw sessionError;
+  let session=sessionData?.session||null;
+  if(!session){
+    const refreshed=await supabaseClient.auth.refreshSession();
+    if(refreshed.error)throw refreshed.error;
+    session=refreshed.data?.session||null;
+  }
+  if(!session?.access_token)throw new Error("Sessão do administrador não encontrada. Faça login novamente.");
+  const response=await fetch(`${SUPABASE_URL}/functions/v1/${SUPABASE_USER_FUNCTION}`,{
+    method:"POST",
+    headers:{"Content-Type":"application/json","Authorization":`Bearer ${session.access_token}`,"apikey":SUPABASE_PUBLISHABLE_KEY},
+    body:JSON.stringify(payload)
+  });
+  const responseText=await response.text();
+  let data=null;
+  try{data=responseText?JSON.parse(responseText):null;}catch(_e){data=null;}
+  if(!response.ok||!data?.ok){
+    throw new Error(data?.error||data?.message||responseText||`HTTP ${response.status}`);
+  }
+  return data;
+}
+async function saveUserEdit(i){
  if(!isAdmin())return denyDelete();
  const u=db.users.find(x=>String(x.id)===String(i));
  if(!u)return;
  const nome=document.getElementById("uNome").value.trim();
- const login=document.getElementById("uLogin").value.trim();
  const senha=document.getElementById("uSenha").value;
  const perfil=document.getElementById("uPerfil").value;
- if(!nome||!login)return alert("Informe nome e usuário.");
- if(db.users.some(x=>x!==u&&String(x.login||"").trim().toLowerCase()===login.toLowerCase()))return alert("Esse usuário já está cadastrado.");
- if(u.login==="admin"&&login!=="admin")return alert("O usuário administrador principal deve continuar com o login admin.");
- u.nome=nome;u.login=login;u.perfil=perfil;if(senha)u.senha=senha;
- registrarAuditoria("Usuário","Editou usuário",`${nome} · ${login} · Perfil: ${perfil}`);
- cancelEditUser();save();
+ if(!nome)return alert("Informe o nome.");
+ if(senha&&senha.length<6)return alert("A nova senha deve ter pelo menos 6 caracteres.");
+ if(!["Administrador","Estoquista","Consulta"].includes(perfil))return alert("Perfil inválido.");
+ const payload={action:"update",id:u.id,nome,perfil};
+ if(senha)payload.senha=senha;
+ const btn=document.getElementById("userSaveBtn");
+ const oldText=btn?.textContent;
+ if(btn){btn.disabled=true;btn.textContent="Salvando...";}
+ try{
+   const data=await chamarGerenciarUsuarios(payload);
+   u.nome=data.user?.nome||nome;
+   u.perfil=data.user?.perfil||perfil;
+   u.senha="";
+   registrarAuditoria("Usuário","Editou usuário",`${u.nome} · ${u.login} · Perfil: ${u.perfil}${senha?" · Senha redefinida":""}`);
+   cancelEditUser();
+   save();
+   alert(`Usuário ${u.login} atualizado com sucesso.`);
+ }catch(e){
+   console.error("Falha ao editar usuário:",e);
+   alert("❌ Não foi possível editar o usuário: "+(e?.message||e));
+ }finally{
+   if(btn){btn.disabled=false;if(oldText)btn.textContent=oldText;}
+ }
 }
 function cancelEditUser(){
  document.getElementById("uNome").value="";document.getElementById("uLogin").value="";document.getElementById("uLogin").readOnly=false;document.getElementById("uEmail").value="";document.getElementById("uEmail").readOnly=false;document.getElementById("uSenha").value="";
@@ -930,13 +1010,21 @@ function cancelEditUser(){
  const btn=document.getElementById("userSaveBtn");btn.textContent="Adicionar usuário";btn.onclick=addUser;
  document.getElementById("userCancelBtn").style.display="none";
 }
-function delUser(i){
+async function delUser(i){
  if(!canDelete()){denyDelete();return;}
  const u=db.users.find(x=>String(x.id)===String(i));
  if(!u)return;
  if(u.login==="admin")return alert("O usuário administrador principal não pode ser excluído.");
- if(confirm("Excluir o usuário "+u.nome+" ("+u.login+")?\n\nEssa ação não pode ser desfeita.")){
-  db.users=db.users.filter(x=>String(x.id)!==String(i)); registrarAuditoria("Usuário","Excluiu usuário",`${u.nome} · ${u.login}`); save();
+ if(!confirm("Excluir o usuário "+u.nome+" ("+u.login+")?\n\nA conta será apagada e ele não poderá mais entrar. Essa ação não pode ser desfeita."))return;
+ try{
+   await chamarGerenciarUsuarios({action:"delete",id:u.id});
+   db.users=db.users.filter(x=>String(x.id)!==String(i));
+   registrarAuditoria("Usuário","Excluiu usuário",`${u.nome} · ${u.login}`);
+   save();
+   alert(`Usuário ${u.login} excluído.`);
+ }catch(e){
+   console.error("Falha ao excluir usuário:",e);
+   alert("❌ Não foi possível excluir o usuário: "+(e?.message||e));
  }
 }
 function formatMes(v){if(!v)return '';const [a,b]=String(v).split('-');return a&&b?`${b}/${a}`:v;}
@@ -1010,7 +1098,7 @@ function aplicarInventario(){
    if(!p)return alert('Um dos produtos da contagem não foi encontrado. Nenhuma alteração foi aplicada.');
    if(!Number.isFinite(fisico)||fisico<0)return alert(`A contagem física de ${p.nome} é inválida. Nenhuma alteração foi aplicada.`);
    const sistema=Number(p.estoque)||0;
-   conferencias.push({p,fisico,sistema,dif:fisico-sistema});
+   conferencias.push({p,fisico,sistema,dif:arred(fisico-sistema)});
  }
  let alterados=0;
  conferencias.forEach(({p,fisico,sistema,dif})=>{
@@ -1250,8 +1338,8 @@ function reverseMovement(m){
  const p=db.produtos.find(x=>String(x.id)===String(m.prodId||"")||String(x.nome).trim().toLowerCase()===String(m.prod||"").trim().toLowerCase());
  if(!p)return;
  const q=Number(m.qtd)||0;
- if(m.tipo==="entrada")p.estoque=Math.max(0,(+p.estoque||0)-q);
- else if(m.tipo==="saida")p.estoque=(+p.estoque||0)+q;
+ if(m.tipo==="entrada")p.estoque=arred(Math.max(0,(+p.estoque||0)-q));
+ else if(m.tipo==="saida")p.estoque=arred((+p.estoque||0)+q);
 }
 function reopenRequisition(reqId){
  const r=db.req.find(x=>String(x.id)===String(reqId));
@@ -1399,7 +1487,7 @@ function deleteAllMovements(){
 function resetData(){
  if(!canDelete()){denyDelete();return;}
  if(!confirm("Isso apagará todos os produtos, requisições, movimentações e anotações. O usuário administrador principal será mantido. Continuar?"))return;
- const admin=db.users.find(u=>u.login==="admin")||{id:id(),nome:"Administrador",login:"admin",senha:"1234",perfil:"Administrador"};
+ const admin=db.users.find(u=>u.login==="admin")||{id:id(),nome:"Administrador",login:"admin",senha:"",perfil:"Administrador"};
  db={produtos:[],req:[],mov:[],users:[admin],anotacoes:[],comprasEspeciais:[],auditoria:[],inventarios:[],emprestimos:[],destilados:[],drinks:[],categorias:[...CATEGORIAS_PADRAO]};
  db.auditoria.unshift({id:id(),dataHora:new Date().toISOString(),data:hojeISO(),usuario:usuarioAtualNome(),tipo:"Sistema",acao:"Resetou dados",detalhes:"Todos os dados operacionais foram removidos."});
  save();
@@ -1435,8 +1523,6 @@ document.addEventListener("DOMContentLoaded",async function(){
       renderDrinkPreview();
     }
     const logged=await checkLogin();
-    if(logged){
-      setInterval(refreshCloudSilently,30000);
-    }
+    if(logged)iniciarSincronizacaoAutomatica();
   }catch(e){console.error("Falha ao iniciar O Estoquista:",e);}
 });
