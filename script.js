@@ -1221,3 +1221,149 @@ document.addEventListener("DOMContentLoaded",async function(){
     }
   }catch(e){console.error("Falha ao iniciar O Estoquista:",e);}
 });
+
+
+/* =========================================================
+   MELHORIAS VISUAIS — LOGIN E IMPRESSÃO DO INVENTÁRIO
+   ========================================================= */
+function toggleLoginPassword(){
+  const input=document.getElementById("loginPass");
+  const button=document.querySelector(".password-toggle");
+  if(!input)return;
+  const mostrar=input.type==="password";
+  input.type=mostrar?"text":"password";
+  if(button){
+    button.setAttribute("aria-label",mostrar?"Ocultar senha":"Mostrar senha");
+    button.setAttribute("title",mostrar?"Ocultar senha":"Mostrar senha");
+  }
+}
+
+function atualizarCategoriasImpressao(){
+  const select=document.getElementById("inventarioCategoriaImpressao");
+  if(!select || !Array.isArray(db?.produtos))return;
+  const atual=select.value;
+  const categorias=[...new Set(db.produtos.map(p=>String(p.categoria||"Sem categoria").trim()||"Sem categoria"))]
+    .sort((a,b)=>a.localeCompare(b,"pt-BR"));
+  select.innerHTML='<option value="">Todas as categorias</option>'+
+    categorias.map(c=>`<option value="${esc(c)}">${esc(c)}</option>`).join("");
+  if(categorias.includes(atual))select.value=atual;
+}
+
+function imprimirInventarioCategoria(){
+  const select=document.getElementById("inventarioCategoriaImpressao");
+  const categoria=select?.value||"";
+  imprimirInventarioProfissional(categoria);
+}
+
+function imprimirInventarioProfissional(categoriaFiltro=""){
+  const data=document.getElementById("inventarioData")?.value||hojeISO();
+  const dataBR=data.split("-").reverse().join("/");
+  const agora=new Date();
+  const hora=agora.toLocaleTimeString("pt-BR",{hour:"2-digit",minute:"2-digit"});
+  const lista=(Array.isArray(db?.produtos)?db.produtos:[])
+    .filter(p=>{
+      const cat=String(p.categoria||"Sem categoria").trim()||"Sem categoria";
+      return !categoriaFiltro || cat===categoriaFiltro;
+    })
+    .slice()
+    .sort((a,b)=>String(a.nome||"").localeCompare(String(b.nome||""),"pt-BR"));
+
+  if(!lista.length){
+    alert(categoriaFiltro
+      ? `Não há produtos cadastrados na categoria "${categoriaFiltro}".`
+      : "Não há produtos cadastrados para impressão.");
+    return;
+  }
+
+  const old=document.getElementById("inventarioPrintSheet");
+  if(old)old.remove();
+
+  const escPrint=v=>String(v??"").replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"}[m]));
+  const qtd=v=>{
+    const n=Number(v);
+    if(!Number.isFinite(n))return "";
+    return Number.isInteger(n)?String(n):n.toFixed(2).replace(/0+$/,"").replace(/\.$/,"").replace(".",",");
+  };
+
+  const rows=lista.map(p=>{
+    const input=document.querySelector(`.inventory-count-input[data-prod-id="${CSS.escape(String(p.id))}"]`);
+    const contagem=input?.value??"";
+    const sistema=Number(p.estoque||0);
+    const diferenca=contagem===""?"":Number(contagem)-sistema;
+    const categoria=String(p.categoria||"Sem categoria").trim()||"Sem categoria";
+    return `<tr>
+      <td class="print-product"><strong>${escPrint(p.nome)}</strong><small>${escPrint(p.cod||categoria)}</small></td>
+      <td class="print-center">${qtd(sistema)}</td>
+      <td class="print-count">${contagem===""?"":escPrint(contagem)}</td>
+      <td class="print-center">${diferenca===""?"":(diferenca>0?"+":"")+qtd(diferenca)}</td>
+    </tr>`;
+  }).join("");
+
+  const sheet=document.createElement("div");
+  sheet.id="inventarioPrintSheet";
+  sheet.innerHTML=`
+    <div class="print-sheet-header">
+      <div class="print-brand">O ESTOQUISTA</div>
+      <div class="print-title">CONTAGEM DE INVENTÁRIO</div>
+      <div class="print-meta">
+        <span><b>Categoria:</b> ${escPrint(categoriaFiltro||"Todas as categorias")}</span>
+        <span><b>Data:</b> ${escPrint(dataBR)}</span>
+        <span><b>Hora da impressão:</b> ${escPrint(hora)}</span>
+        <span><b>Responsável:</b> ${escPrint(usuarioAtualNome())}</span>
+      </div>
+    </div>
+    <div class="print-instructions">
+      <b>Conferência de estoque</b>
+      <span>Compare o estoque do sistema com a contagem física e registre a diferença.</span>
+    </div>
+    <table class="print-inventory-table">
+      <thead>
+        <tr>
+          <th class="col-product">PRODUTO</th>
+          <th class="col-system">ESTOQUE<br>DO SISTEMA</th>
+          <th class="col-count">CONTAGEM<br>FÍSICA</th>
+          <th class="col-diff">DIFERENÇA</th>
+        </tr>
+      </thead>
+      <tbody>${rows}</tbody>
+    </table>
+    <div class="print-sheet-footer">
+      <div>Documento de conferência de estoque — O Estoquista</div>
+      <div class="print-signatures">
+        <span>Responsável: ____________________________________</span>
+        <span>Conferente: ____________________________________</span>
+      </div>
+    </div>`;
+
+  document.body.appendChild(sheet);
+
+  if(categoriaFiltro){
+    sheet.classList.add("print-single-page");
+    const qtdItens=lista.length;
+    if(qtdItens>18){
+      const escala=Math.max(0.60,Math.min(1,18/qtdItens));
+      sheet.style.zoom=String(escala);
+    }
+  }
+
+  document.body.classList.add("imprimindo-inventario");
+  setTimeout(()=>{
+    window.print();
+    setTimeout(()=>{
+      document.body.classList.remove("imprimindo-inventario");
+      sheet.remove();
+    },700);
+  },180);
+}
+
+(function(){
+  function initImpressaoInventario(){
+    atualizarCategoriasImpressao();
+  }
+  if(document.readyState==="loading"){
+    document.addEventListener("DOMContentLoaded",initImpressaoInventario);
+  }else{
+    initImpressaoInventario();
+  }
+  setInterval(atualizarCategoriasImpressao,2000);
+})();
