@@ -67,38 +67,12 @@ async function cloudSave(){
   return cloudSaveQueue;
 }
 async function syncCloudAfterLogin(authUser){
-  if(!supabaseClient)throw new Error("Biblioteca do Supabase não carregada.");
-
-  // Primeiro valida o usuário autenticado e carrega o perfil.
-  // A leitura de estoquista_state é complementar e não pode impedir o login.
-  let profile=null;
-  let profileError=null;
-  const byId=await supabaseClient.from("profiles")
-    .select("id,nome,login,email,perfil,ativo").eq("id",authUser.id).maybeSingle();
-  profile=byId.data||null;
-  profileError=byId.error||null;
-
-  // Fallback por e-mail para instalações antigas/ambientes em que a leitura por UUID
-  // pode sofrer uma política RLS diferente. O usuário já foi autenticado pelo Auth.
-  if(!profile && authUser.email){
-    const byEmail=await supabaseClient.from("profiles")
-      .select("id,nome,login,email,perfil,ativo").eq("email",authUser.email).maybeSingle();
-    if(byEmail.data) { profile=byEmail.data; profileError=null; }
-    else if(byEmail.error) profileError=byEmail.error;
-  }
-
-  // Último fallback: perfil já sincronizado no cache local. Isso permite recuperar
-  // a sessão mesmo se a tabela profiles estiver temporariamente indisponível.
-  if(!profile && Array.isArray(db?.users)){
-    profile=db.users.find(u=>String(u.id)===String(authUser.id))||
-      db.users.find(u=>String(u.email||"").toLowerCase()===String(authUser.email||"").toLowerCase())||null;
-    if(profile) profileError=null;
-  }
-
-  if(profileError && !profile)throw profileError;
-  if(!profile)throw new Error("Perfil não encontrado para este usuário no banco de dados.");
-  if(profile.ativo===false)throw new Error("Usuário inativo.");
-
+  await cloudLoad();
+  const {data:profile,error:profileError}=await supabaseClient.from("profiles")
+    .select("id,nome,login,email,perfil,ativo").eq("id",authUser.id).single();
+  if(profileError)throw profileError;
+  if(!profile||profile.ativo===false)throw new Error("Usuário inativo.");
+  if(!Array.isArray(db.users))db.users=[];
   const cleanProfile={
     id:profile.id,
     nome:profile.nome||profile.login||authUser.email||"Usuário",
@@ -108,38 +82,16 @@ async function syncCloudAfterLogin(authUser){
     ativo:profile.ativo!==false,
     senha:""
   };
-
-  if(!Array.isArray(db.users))db.users=[];
   const existing=db.users.find(u=>String(u.id)===String(profile.id)||
     String(u.login||"").toLowerCase()===String(cleanProfile.login).toLowerCase());
   if(existing)Object.assign(existing,cleanProfile);else db.users.push(cleanProfile);
   normalizeCloudUsers();
-
-  // Dados operacionais são sincronizados depois da autenticação.
-  // Se houver problema de RLS/rede nessa tabela, o usuário continua logado.
-  try{
-    const data=await cloudLoad();
-    const cloudDados=data?.dados;
-    const cloudHasData=cloudDados&&typeof cloudDados==="object"
-      ? Object.entries(cloudDados).some(([k,v])=>k!=="users"&&Array.isArray(v)&&v.length>0)
-      : false;
-    const localHasData=Object.entries(db).some(([k,v])=>k!=="users"&&Array.isArray(v)&&v.length>0);
-    if(!cloudHasData&&localHasData&&cloudReady)await cloudSave();
-  }catch(e){
-    cloudReady=false;
-    console.warn("Dados operacionais ainda não foram sincronizados; login mantido:",e);
-  }
-
-  // Reaplica o perfil depois de qualquer carga da nuvem para garantir as permissões.
-  if(!Array.isArray(db.users))db.users=[];
-  const afterCloud=db.users.find(u=>String(u.id)===String(profile.id));
-  if(afterCloud)Object.assign(afterCloud,cleanProfile);
-  else db.users.push(cleanProfile);
-  normalizeCloudUsers();
+  const localHasData=Object.entries(db).some(([k,v])=>k!=="users"&&Array.isArray(v)&&v.length>0);
+  const cloudHasData=Object.entries((await supabaseClient.from("estoquista_state").select("dados").eq("id",1).single()).data?.dados||{})
+    .some(([k,v])=>k!=="users"&&Array.isArray(v)&&v.length>0);
+  if(!cloudHasData&&localHasData)await cloudSave();
   persistLocalOnly();
-  return cleanProfile;
 }
-
 function persistLocalOnly(){
   try{
     normalizarCategoriasProdutos();
@@ -175,12 +127,19 @@ async function refreshCloudSilently(){
 }
 
 function ensureAdmin(){
-  if(!Array.isArray(db.users))db.users=[];
-  if(!Array.isArray(db.anotacoes))db.anotacoes=[];
-  // O administrador é gerenciado exclusivamente pelo Supabase Auth + profiles.
-  // Não criar usuário/senha local aqui.
+  if(!Array.isArray(db.users)) db.users=[];
+if(!Array.isArray(db.anotacoes)) db.anotacoes=[];
+  const adminUser=db.users.find(u=>String(u.login||"").trim().toLowerCase()==="admin");
+  if(adminUser){
+    adminUser.login="admin";
+    adminUser.perfil="Administrador";
+    if(!adminUser.senha)adminUser.senha="1234";
+    save();
+  } else {
+    db.users.push({id:Date.now(),nome:"Administrador",login:"admin",senha:"1234",perfil:"Administrador"});
+    save();
+  }
 }
-
 async function login(){
   const user=(document.getElementById("loginUser").value||"").trim();
   const pass=document.getElementById("loginPass").value||"";
@@ -219,15 +178,7 @@ async function login(){
   }catch(e){
     console.error("Falha no login online:",e);
     if(err){
-      const msg=String(e?.message||"");
-      if(/invalid login credentials|invalid credentials/i.test(msg))
-        err.textContent="Usuário ou senha inválidos.";
-      else if(/perfil não encontrado/i.test(msg))
-        err.textContent="Login autenticado, mas este usuário ainda não possui um perfil cadastrado no sistema.";
-      else if(/permission|row-level security|rls|not authorized/i.test(msg))
-        err.textContent="Login autenticado, mas o Supabase bloqueou o acesso ao perfil. Verifique as permissões da tabela profiles.";
-      else
-        err.textContent="Não foi possível concluir o login. Tente novamente.";
+      err.textContent="Usuário ou senha inválidos, ou não foi possível conectar ao servidor.";
       err.style.display="block";
     }
     document.getElementById("loginPass").value="";
@@ -1255,6 +1206,7 @@ if(document.getElementById("relatorioMes")) document.getElementById("relatorioMe
 
 document.addEventListener("DOMContentLoaded",async function(){
   try{
+    ensureAdmin();
     if(document.getElementById("noteData"))document.getElementById("noteData").value=hojeISO();
     if(document.getElementById("bebDestVolume")){
       ["bebDestVolume","bebDestPreco"].forEach(x=>document.getElementById(x).addEventListener("input",updateBebDestCost));
@@ -1269,149 +1221,3 @@ document.addEventListener("DOMContentLoaded",async function(){
     }
   }catch(e){console.error("Falha ao iniciar O Estoquista:",e);}
 });
-
-
-/* =========================================================
-   MELHORIAS VISUAIS — LOGIN E IMPRESSÃO DO INVENTÁRIO
-   ========================================================= */
-function toggleLoginPassword(){
-  const input=document.getElementById("loginPass");
-  const button=document.querySelector(".password-toggle");
-  if(!input)return;
-  const mostrar=input.type==="password";
-  input.type=mostrar?"text":"password";
-  if(button){
-    button.setAttribute("aria-label",mostrar?"Ocultar senha":"Mostrar senha");
-    button.setAttribute("title",mostrar?"Ocultar senha":"Mostrar senha");
-  }
-}
-
-function atualizarCategoriasImpressao(){
-  const select=document.getElementById("inventarioCategoriaImpressao");
-  if(!select || !Array.isArray(db?.produtos))return;
-  const atual=select.value;
-  const categorias=[...new Set(db.produtos.map(p=>String(p.categoria||"Sem categoria").trim()||"Sem categoria"))]
-    .sort((a,b)=>a.localeCompare(b,"pt-BR"));
-  select.innerHTML='<option value="">Todas as categorias</option>'+
-    categorias.map(c=>`<option value="${esc(c)}">${esc(c)}</option>`).join("");
-  if(categorias.includes(atual))select.value=atual;
-}
-
-function imprimirInventarioCategoria(){
-  const select=document.getElementById("inventarioCategoriaImpressao");
-  const categoria=select?.value||"";
-  imprimirInventarioProfissional(categoria);
-}
-
-function imprimirInventarioProfissional(categoriaFiltro=""){
-  const data=document.getElementById("inventarioData")?.value||hojeISO();
-  const dataBR=data.split("-").reverse().join("/");
-  const agora=new Date();
-  const hora=agora.toLocaleTimeString("pt-BR",{hour:"2-digit",minute:"2-digit"});
-  const lista=(Array.isArray(db?.produtos)?db.produtos:[])
-    .filter(p=>{
-      const cat=String(p.categoria||"Sem categoria").trim()||"Sem categoria";
-      return !categoriaFiltro || cat===categoriaFiltro;
-    })
-    .slice()
-    .sort((a,b)=>String(a.nome||"").localeCompare(String(b.nome||""),"pt-BR"));
-
-  if(!lista.length){
-    alert(categoriaFiltro
-      ? `Não há produtos cadastrados na categoria "${categoriaFiltro}".`
-      : "Não há produtos cadastrados para impressão.");
-    return;
-  }
-
-  const old=document.getElementById("inventarioPrintSheet");
-  if(old)old.remove();
-
-  const escPrint=v=>String(v??"").replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"}[m]));
-  const qtd=v=>{
-    const n=Number(v);
-    if(!Number.isFinite(n))return "";
-    return Number.isInteger(n)?String(n):n.toFixed(2).replace(/0+$/,"").replace(/\.$/,"").replace(".",",");
-  };
-
-  const rows=lista.map(p=>{
-    const input=document.querySelector(`.inventory-count-input[data-prod-id="${CSS.escape(String(p.id))}"]`);
-    const contagem=input?.value??"";
-    const sistema=Number(p.estoque||0);
-    const diferenca=contagem===""?"":Number(contagem)-sistema;
-    const categoria=String(p.categoria||"Sem categoria").trim()||"Sem categoria";
-    return `<tr>
-      <td class="print-product"><strong>${escPrint(p.nome)}</strong><small>${escPrint(p.cod||categoria)}</small></td>
-      <td class="print-center">${qtd(sistema)}</td>
-      <td class="print-count">${contagem===""?"":escPrint(contagem)}</td>
-      <td class="print-center">${diferenca===""?"":(diferenca>0?"+":"")+qtd(diferenca)}</td>
-    </tr>`;
-  }).join("");
-
-  const sheet=document.createElement("div");
-  sheet.id="inventarioPrintSheet";
-  sheet.innerHTML=`
-    <div class="print-sheet-header">
-      <div class="print-brand">O ESTOQUISTA</div>
-      <div class="print-title">CONTAGEM DE INVENTÁRIO</div>
-      <div class="print-meta">
-        <span><b>Categoria:</b> ${escPrint(categoriaFiltro||"Todas as categorias")}</span>
-        <span><b>Data:</b> ${escPrint(dataBR)}</span>
-        <span><b>Hora da impressão:</b> ${escPrint(hora)}</span>
-        <span><b>Responsável:</b> ${escPrint(usuarioAtualNome())}</span>
-      </div>
-    </div>
-    <div class="print-instructions">
-      <b>Conferência de estoque</b>
-      <span>Compare o estoque do sistema com a contagem física e registre a diferença.</span>
-    </div>
-    <table class="print-inventory-table">
-      <thead>
-        <tr>
-          <th class="col-product">PRODUTO</th>
-          <th class="col-system">ESTOQUE<br>DO SISTEMA</th>
-          <th class="col-count">CONTAGEM<br>FÍSICA</th>
-          <th class="col-diff">DIFERENÇA</th>
-        </tr>
-      </thead>
-      <tbody>${rows}</tbody>
-    </table>
-    <div class="print-sheet-footer">
-      <div>Documento de conferência de estoque — O Estoquista</div>
-      <div class="print-signatures">
-        <span>Responsável: ____________________________________</span>
-        <span>Conferente: ____________________________________</span>
-      </div>
-    </div>`;
-
-  document.body.appendChild(sheet);
-
-  if(categoriaFiltro){
-    sheet.classList.add("print-single-page");
-    const qtdItens=lista.length;
-    if(qtdItens>18){
-      const escala=Math.max(0.60,Math.min(1,18/qtdItens));
-      sheet.style.zoom=String(escala);
-    }
-  }
-
-  document.body.classList.add("imprimindo-inventario");
-  setTimeout(()=>{
-    window.print();
-    setTimeout(()=>{
-      document.body.classList.remove("imprimindo-inventario");
-      sheet.remove();
-    },700);
-  },180);
-}
-
-(function(){
-  function initImpressaoInventario(){
-    atualizarCategoriasImpressao();
-  }
-  if(document.readyState==="loading"){
-    document.addEventListener("DOMContentLoaded",initImpressaoInventario);
-  }else{
-    initImpressaoInventario();
-  }
-  setInterval(atualizarCategoriasImpressao,2000);
-})();
