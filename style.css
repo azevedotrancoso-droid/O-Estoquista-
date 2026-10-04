@@ -1504,3 +1504,12 @@ nav#nav button.active .nav-icon{color:#fff}
   body.imprimindo-inv #invPrintDoc,body.imprimindo-inv #invPrintDoc *{visibility:visible!important}
 }
 .category-locked{display:inline-block;padding:4px 10px;border-radius:999px;background:#eef3f9;color:#0a2748;font-weight:700;font-size:12px;white-space:nowrap}
+
+/* ===== Saudação do administrador ===== */
+.greeting-card{display:flex;align-items:center;justify-content:space-between;gap:14px;margin:0 0 22px;padding:18px 22px;border-radius:16px;background:linear-gradient(120deg,#0a2748,#10589f);color:#fff;box-shadow:0 8px 20px rgba(10,39,72,.22)}
+.greeting-card .greeting-text{display:flex;flex-direction:column;gap:4px;min-width:0}
+.greeting-card strong{font-size:22px;line-height:1.2;font-weight:800;overflow-wrap:anywhere}
+.greeting-card span{font-size:14px;opacity:.9}
+.greeting-card .greeting-icon{font-size:34px;line-height:1;flex:0 0 auto}
+@media(max-width:700px){.greeting-card{padding:14px 16px}.greeting-card strong{font-size:18px}.greeting-card .greeting-icon{font-size:28px}}
+@media print{.greeting-card{display:none!important}}

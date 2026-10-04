@@ -486,8 +486,26 @@ function normalizeIcons(root=document.body){
   });
 }
 
+function renderSaudacao(){
+  const box=document.getElementById("saudacaoAdmin");
+  if(!box)return;
+  if(!isAdmin()){box.style.display="none";return;}
+  const u=currentUser();
+  const agora=new Date();
+  const hora=agora.getHours();
+  const saudacao=hora<12?"Bom dia":(hora<18?"Boa tarde":"Boa noite");
+  const icone=hora<12?"☀️":(hora<18?"🌤️":"🌙");
+  const nome=String((u&&u.nome)||"").trim();
+  let data=agora.toLocaleDateString("pt-BR",{weekday:"long",day:"numeric",month:"long",year:"numeric"});
+  data=data.charAt(0).toUpperCase()+data.slice(1);
+  document.getElementById("saudacaoTexto").textContent=nome?`${saudacao}, ${nome}!`:`${saudacao}!`;
+  document.getElementById("saudacaoData").textContent=data;
+  document.getElementById("saudacaoIcone").textContent=icone;
+  box.style.display="flex";
+}
 function render(){
  applyPermissions();
+ renderSaudacao();
  document.querySelectorAll("select").forEach(()=>{});
  sProdutos.textContent=db.produtos.length;sReq.textContent=db.req.length;sMov.textContent=db.mov.length;
  const low=db.produtos.filter(p=>p.estoque<=p.min);sBaixo.textContent=low.length;
@@ -1552,6 +1570,7 @@ document.querySelectorAll("nav button").forEach(b=>{ b.setAttribute("type","butt
   if(b.dataset.view==="auditoria" && !isAdmin()){return;}
 }; });
 render();
+setInterval(renderSaudacao,60000);
 console.info("O Estoquista iniciado: dados locais carregados com sucesso.");
 if(document.getElementById("mData")) document.getElementById("mData").value=new Date().toISOString().slice(0,10);
 if(document.getElementById("eData")) document.getElementById("eData").value=hojeISO();
