@@ -67,12 +67,16 @@ async function cloudSave(){
   return cloudSaveQueue;
 }
 async function syncCloudAfterLogin(authUser){
-  await cloudLoad();
+  if(!supabaseClient)throw new Error("Biblioteca do Supabase não carregada.");
+
+  // Primeiro valida o usuário autenticado e carrega o perfil.
+  // A leitura de estoquista_state é complementar e não pode impedir o login.
   const {data:profile,error:profileError}=await supabaseClient.from("profiles")
     .select("id,nome,login,email,perfil,ativo").eq("id",authUser.id).single();
   if(profileError)throw profileError;
-  if(!profile||profile.ativo===false)throw new Error("Usuário inativo.");
-  if(!Array.isArray(db.users))db.users=[];
+  if(!profile)throw new Error("Perfil não encontrado.");
+  if(profile.ativo===false)throw new Error("Usuário inativo.");
+
   const cleanProfile={
     id:profile.id,
     nome:profile.nome||profile.login||authUser.email||"Usuário",
@@ -82,16 +86,38 @@ async function syncCloudAfterLogin(authUser){
     ativo:profile.ativo!==false,
     senha:""
   };
+
+  if(!Array.isArray(db.users))db.users=[];
   const existing=db.users.find(u=>String(u.id)===String(profile.id)||
     String(u.login||"").toLowerCase()===String(cleanProfile.login).toLowerCase());
   if(existing)Object.assign(existing,cleanProfile);else db.users.push(cleanProfile);
   normalizeCloudUsers();
-  const localHasData=Object.entries(db).some(([k,v])=>k!=="users"&&Array.isArray(v)&&v.length>0);
-  const cloudHasData=Object.entries((await supabaseClient.from("estoquista_state").select("dados").eq("id",1).single()).data?.dados||{})
-    .some(([k,v])=>k!=="users"&&Array.isArray(v)&&v.length>0);
-  if(!cloudHasData&&localHasData)await cloudSave();
+
+  // Dados operacionais são sincronizados depois da autenticação.
+  // Se houver problema de RLS/rede nessa tabela, o usuário continua logado.
+  try{
+    const data=await cloudLoad();
+    const cloudDados=data?.dados;
+    const cloudHasData=cloudDados&&typeof cloudDados==="object"
+      ? Object.entries(cloudDados).some(([k,v])=>k!=="users"&&Array.isArray(v)&&v.length>0)
+      : false;
+    const localHasData=Object.entries(db).some(([k,v])=>k!=="users"&&Array.isArray(v)&&v.length>0);
+    if(!cloudHasData&&localHasData&&cloudReady)await cloudSave();
+  }catch(e){
+    cloudReady=false;
+    console.warn("Dados operacionais ainda não foram sincronizados; login mantido:",e);
+  }
+
+  // Reaplica o perfil depois de qualquer carga da nuvem para garantir as permissões.
+  if(!Array.isArray(db.users))db.users=[];
+  const afterCloud=db.users.find(u=>String(u.id)===String(profile.id));
+  if(afterCloud)Object.assign(afterCloud,cleanProfile);
+  else db.users.push(cleanProfile);
+  normalizeCloudUsers();
   persistLocalOnly();
+  return cleanProfile;
 }
+
 function persistLocalOnly(){
   try{
     normalizarCategoriasProdutos();
@@ -127,19 +153,12 @@ async function refreshCloudSilently(){
 }
 
 function ensureAdmin(){
-  if(!Array.isArray(db.users)) db.users=[];
-if(!Array.isArray(db.anotacoes)) db.anotacoes=[];
-  const adminUser=db.users.find(u=>String(u.login||"").trim().toLowerCase()==="admin");
-  if(adminUser){
-    adminUser.login="admin";
-    adminUser.perfil="Administrador";
-    if(!adminUser.senha)adminUser.senha="1234";
-    save();
-  } else {
-    db.users.push({id:Date.now(),nome:"Administrador",login:"admin",senha:"1234",perfil:"Administrador"});
-    save();
-  }
+  if(!Array.isArray(db.users))db.users=[];
+  if(!Array.isArray(db.anotacoes))db.anotacoes=[];
+  // O administrador é gerenciado exclusivamente pelo Supabase Auth + profiles.
+  // Não criar usuário/senha local aqui.
 }
+
 async function login(){
   const user=(document.getElementById("loginUser").value||"").trim();
   const pass=document.getElementById("loginPass").value||"";
