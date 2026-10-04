@@ -612,3 +612,143 @@ header small{
   .products-card .product-table-wrap{margin-right:0!important}
   .products-card .product-table{min-width:700px!important}
 }
+
+
+/* =========================================================
+   LOGIN — PADRÃO VISUAL DO ANALISE DE CMV
+   ========================================================= */
+.login-screen{
+  position:fixed!important;inset:0!important;
+  background:linear-gradient(145deg,#071a33 0%,#0b2f5b 58%,#174a82 100%)!important;
+  display:flex!important;align-items:center!important;justify-content:center!important;
+  padding:28px 18px 74px!important;z-index:99999!important;overflow:hidden!important;
+}
+.login-screen:before{
+  content:"";position:absolute;left:-12%;right:-12%;top:25%;height:38%;
+  background:linear-gradient(165deg,transparent 0 32%,rgba(32,112,190,.55) 32.2% 70%,transparent 70.2%);
+  transform:rotate(-7deg);pointer-events:none;
+}
+.login-screen:after{
+  content:"";position:absolute;left:-15%;right:-15%;bottom:-9%;height:20%;
+  background:linear-gradient(175deg,#1687e8,#0b2f5b);
+  border-radius:50% 50% 0 0/60% 60% 0 0;
+  box-shadow:0 -20px 0 rgba(21,93,157,.35);pointer-events:none;
+}
+.login-card{
+  position:relative!important;z-index:2!important;width:min(520px,100%)!important;
+  background:#fff!important;border-radius:30px!important;padding:34px 34px 28px!important;
+  box-shadow:0 28px 80px rgba(0,0,0,.30)!important;
+}
+.login-logo{
+  width:78px!important;height:78px!important;border-radius:22px!important;
+  background:#0b2f5b!important;color:#fff!important;
+  display:flex!important;align-items:center!important;justify-content:center!important;
+  margin:0 auto 17px!important;box-shadow:0 12px 28px rgba(11,47,91,.22)!important;
+  overflow:hidden!important;font-size:0!important;
+}
+.login-logo svg{width:48px!important;height:48px!important;stroke:currentColor!important;stroke-width:1.5!important;fill:none!important;stroke-linecap:round!important;stroke-linejoin:round!important}
+.login-card h1{text-align:center!important;color:#0b2f5b!important;margin:0 0 6px!important;font-size:34px!important;letter-spacing:-1.2px!important;font-weight:900!important}
+.login-card h1 span{color:#1677d8!important}
+.login-card .subtitle{text-align:center!important;color:#64748b!important;margin:0 0 28px!important;font-size:16px!important;line-height:1.45!important}
+.login-field{margin-bottom:17px!important}
+.login-field label{display:block!important;font-weight:900!important;color:#172a4b!important;margin-bottom:8px!important;letter-spacing:1.1px!important;font-size:13px!important}
+.login-input-wrap,.password-wrap{position:relative!important;display:flex!important;align-items:center!important}
+.login-input-icon{position:absolute!important;left:17px!important;top:50%!important;transform:translateY(-50%)!important;color:#536581!important;z-index:2!important}
+.login-input-icon svg{width:23px!important;height:23px!important;stroke:currentColor!important;stroke-width:1.9!important;fill:none!important;stroke-linecap:round!important;stroke-linejoin:round!important}
+.login-field input{
+  width:100%!important;box-sizing:border-box!important;padding:15px 48px 15px 54px!important;
+  border:2px solid #dfe4eb!important;border-radius:18px!important;font-size:16px!important;
+  font-weight:600!important;outline:none!important;color:#182033!important;background:#fff!important;min-height:58px!important;
+}
+.login-field input::placeholder{color:#7b8492!important;font-weight:500!important}
+.login-field input:focus{border-color:#0b2f5b!important;box-shadow:0 0 0 4px rgba(11,47,91,.10)!important}
+.password-wrap input{padding-left:54px!important;padding-right:52px!important}
+.password-toggle{
+  position:absolute!important;right:8px!important;top:50%!important;transform:translateY(-50%)!important;
+  width:42px!important;height:42px!important;min-height:42px!important;padding:0!important;border:0!important;
+  background:transparent!important;box-shadow:none!important;color:#536581!important;font-size:0!important;
+  display:flex!important;align-items:center!important;justify-content:center!important;cursor:pointer!important;border-radius:12px!important;
+}
+.password-toggle:hover{background:#eef4fb!important;color:#0b4fa3!important}
+.password-toggle:focus-visible{outline:none!important;background:#eef4fb!important;color:#0b4fa3!important;box-shadow:0 0 0 3px rgba(11,79,163,.14)!important}
+.password-eye-icon{width:21px!important;height:21px!important;fill:none!important;stroke:currentColor!important;stroke-width:1.9!important;stroke-linecap:round!important;stroke-linejoin:round!important}
+.login-btn{
+  width:100%!important;min-height:58px!important;padding:14px 18px!important;border:0!important;border-radius:18px!important;
+  background:linear-gradient(135deg,#0b2f5b,#1263ad)!important;color:#fff!important;font-size:19px!important;
+  font-weight:900!important;cursor:pointer!important;display:flex!important;align-items:center!important;justify-content:center!important;
+  gap:18px!important;box-shadow:0 10px 22px rgba(11,47,91,.20)!important;transition:transform .15s ease,box-shadow .15s ease!important;
+}
+.login-btn strong{font-size:30px!important;line-height:1!important;font-weight:500!important}
+.login-btn:hover{transform:translateY(-1px)!important;box-shadow:0 14px 28px rgba(11,47,91,.25)!important}
+.login-btn:active{transform:translateY(0)!important}
+.login-error{display:none!important;background:#fee2e2!important;color:#b91c1c!important;padding:11px 13px!important;border-radius:12px!important;margin-bottom:15px!important;font-weight:700!important}
+.login-help{
+  margin-top:16px!important;border:2px solid #c8e0fb!important;background:#eef7ff!important;color:#164a8c!important;
+  border-radius:18px!important;padding:14px 16px!important;display:flex!important;align-items:center!important;gap:12px!important;
+  font-size:14px!important;line-height:1.35!important;font-weight:800!important;
+}
+.login-help-icon{width:28px!important;height:28px!important;min-width:28px!important;border-radius:50%!important;background:#0b4fa3!important;color:#fff!important;display:flex!important;align-items:center!important;justify-content:center!important;font-weight:900!important;font-family:Georgia,serif!important;font-size:18px!important}
+.login-footer{position:absolute!important;z-index:3!important;bottom:25px!important;left:0!important;right:0!important;text-align:center!important;color:#dbe8f7!important;font-size:15px!important;font-weight:800!important}
+.login-footer span{margin:0 5px!important}
+.inventory-print-tools{display:flex;align-items:flex-end;gap:12px;flex-wrap:wrap}
+.inventory-print-tools>div{min-width:190px}
+.inventory-print-tools label{display:block;margin-bottom:6px;font-weight:700;font-size:12px;color:#334155}
+.inventory-print-tools select{width:100%;min-height:40px}
+@media(max-width:650px){
+ .login-screen{padding:25px 18px 72px!important}
+ .login-card{padding:30px 22px 23px!important;border-radius:28px!important}
+ .login-logo{width:72px!important;height:72px!important;border-radius:21px!important}
+ .login-logo svg{width:44px!important;height:44px!important}
+ .login-card h1{font-size:31px!important}
+ .login-card .subtitle{font-size:15px!important;margin-bottom:24px!important}
+ .login-field input{min-height:56px!important;border-radius:17px!important}
+ .login-btn{min-height:56px!important;border-radius:17px!important}
+ .login-help{font-size:13px!important}
+ .login-footer{bottom:22px!important;font-size:14px!important}
+ .inventory-print-tools{align-items:stretch}
+ .inventory-print-tools>div{min-width:0;width:100%}
+ .inventory-print-tools button{width:100%}
+}
+
+/* =========================================================
+   IMPRESSÃO DE INVENTÁRIO — PADRÃO ANALISE DE CMV
+   ========================================================= */
+#inventarioPrintSheet{display:none}
+@media print{
+ @page{size:A4 landscape;margin:8mm 9mm 10mm 9mm}
+ html,body{background:#fff!important;width:100%!important;height:auto!important;margin:0!important;padding:0!important}
+ body.imprimindo-inventario> *{display:none!important;visibility:hidden!important}
+ body.imprimindo-inventario>#inventarioPrintSheet{
+   display:block!important;visibility:visible!important;position:static!important;width:100%!important;height:auto!important;
+   margin:0!important;padding:0!important;background:#fff!important;color:#172033!important;box-shadow:none!important;
+   font-family:Arial,Helvetica,sans-serif!important;
+ }
+ #inventarioPrintSheet .print-sheet-header{display:block!important;margin:0 0 4mm!important;padding:0 0 3mm!important;border-bottom:2px solid #123e70!important}
+ #inventarioPrintSheet .print-brand{color:#123e70!important;font-size:10pt!important;font-weight:800!important;letter-spacing:.6px!important;text-transform:uppercase!important}
+ #inventarioPrintSheet .print-title{color:#172033!important;font-size:20pt!important;font-weight:800!important;margin:1mm 0 2mm!important;line-height:1.05!important}
+ #inventarioPrintSheet .print-meta{display:flex!important;gap:10mm!important;flex-wrap:wrap!important;color:#526071!important;font-size:8pt!important}
+ #inventarioPrintSheet .print-instructions{display:block!important;margin:0 0 3mm!important;padding:2mm 3mm!important;background:#f3f6f9!important;border:1px solid #d5dce5!important;border-radius:2mm!important;font-size:8pt!important;color:#526071!important}
+ #inventarioPrintSheet .print-instructions b{color:#123e70!important;margin-right:5mm!important}
+ #inventarioPrintSheet .print-inventory-table{display:table!important;width:100%!important;max-width:100%!important;table-layout:fixed!important;border-collapse:collapse!important;font-size:8.5pt!important}
+ #inventarioPrintSheet .print-inventory-table thead{display:table-header-group!important}
+ #inventarioPrintSheet .print-inventory-table tr{break-inside:avoid!important;page-break-inside:avoid!important}
+ #inventarioPrintSheet .print-inventory-table th{background:#123e70!important;color:#fff!important;border:1px solid #123e70!important;padding:2.5mm 2mm!important;font-size:8pt!important;font-weight:800!important;text-align:left!important;vertical-align:middle!important}
+ #inventarioPrintSheet .print-inventory-table td{background:#fff!important;color:#172033!important;border:1px solid #bcc5d0!important;padding:1.7mm 2mm!important;vertical-align:middle!important;overflow-wrap:break-word!important}
+ #inventarioPrintSheet .col-product{width:51%!important}.col-system{width:10%!important}.col-count{width:19%!important}.col-diff{width:11%!important}
+ #inventarioPrintSheet .print-product strong{display:block!important;font-weight:700!important}
+ #inventarioPrintSheet .print-product small{display:block!important;margin-top:.5mm!important;color:#667085!important;font-size:7pt!important}
+ #inventarioPrintSheet .print-center{text-align:center!important}
+ #inventarioPrintSheet .print-count{text-align:center!important;font-weight:600!important;height:9mm!important}
+ #inventarioPrintSheet .print-sheet-footer{margin-top:5mm!important;padding-top:3mm!important;border-top:1px solid #aeb8c5!important;color:#526071!important;font-size:8pt!important}
+ #inventarioPrintSheet .print-signatures{display:flex!important;justify-content:space-between!important;gap:15mm!important;margin-top:10mm!important;color:#172033!important}
+ #inventarioPrintSheet.print-single-page .print-title{font-size:17pt!important}
+ #inventarioPrintSheet.print-single-page .print-meta{font-size:7.2pt!important;gap:5mm!important}
+ #inventarioPrintSheet.print-single-page .print-instructions{margin-bottom:2mm!important;padding:1.4mm 2.2mm!important;font-size:7pt!important}
+ #inventarioPrintSheet.print-single-page .print-inventory-table{font-size:7.2pt!important}
+ #inventarioPrintSheet.print-single-page .print-inventory-table th{padding:1.5mm 1.2mm!important;font-size:6.8pt!important}
+ #inventarioPrintSheet.print-single-page .print-inventory-table td{padding:1mm 1.2mm!important;line-height:1.05!important}
+ #inventarioPrintSheet.print-single-page .print-count{height:6mm!important;font-size:8pt!important}
+ #inventarioPrintSheet.print-single-page .print-product small{font-size:6pt!important;margin-top:0!important}
+ #inventarioPrintSheet.print-single-page .print-sheet-footer{margin-top:2mm!important;padding-top:1.5mm!important;font-size:6.5pt!important}
+ #inventarioPrintSheet.print-single-page .print-signatures{margin-top:3mm!important}
+}

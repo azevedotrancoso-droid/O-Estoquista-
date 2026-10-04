@@ -19,22 +19,35 @@
 <body>
 <div id="loginScreen" class="login-screen">
   <div class="login-card">
-    <div class="login-logo">📦</div>
-    <h1>O Estoquista</h1>
-    <p class="subtitle">Acesse sua conta para continuar</p>
+    <div class="login-logo" aria-label="Logo O Estoquista">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7.5 12 4l8 3.5v9L12 20l-8-3.5z"/><path d="M4 7.5 12 11l8-3.5M12 11v9"/></svg>
+    </div>
+    <h1>O <span>Estoquista</span></h1>
+    <p class="subtitle">Controle de estoque • requisições, entradas e saídas</p>
     <div id="loginError" class="login-error">Usuário ou senha inválidos.</div>
     <form id="loginForm" onsubmit="event.preventDefault();login();">
       <div class="login-field">
-        <label for="loginUser">Usuário</label>
-        <input id="loginUser" type="text" autocomplete="username" placeholder="Digite seu usuário" required>
+        <label for="loginUser">USUÁRIO</label>
+        <div class="login-input-wrap">
+          <span class="login-input-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 20c.8-4 3.4-6 8-6s7.2 2 8 6"/></svg></span>
+          <input id="loginUser" type="text" autocomplete="username" placeholder="Digite seu usuário" required>
+        </div>
       </div>
       <div class="login-field">
-        <label for="loginPass">Senha</label>
-        <input id="loginPass" type="password" autocomplete="current-password" placeholder="Digite sua senha" required>
+        <label for="loginPass">SENHA</label>
+        <div class="password-wrap">
+          <span class="login-input-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="5" y="10" width="14" height="10" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg></span>
+          <input id="loginPass" type="password" autocomplete="current-password" placeholder="Digite sua senha" required>
+          <button type="button" class="password-toggle" onclick="toggleLoginPassword()" aria-label="Mostrar senha" title="Mostrar senha">
+            <svg class="password-eye-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6Z"/><circle cx="12" cy="12" r="2.6"/></svg>
+          </button>
+        </div>
       </div>
-      <button class="login-btn" type="submit">Entrar</button>
+      <button class="login-btn" type="submit"><span>Entrar</span><strong aria-hidden="true">→</strong></button>
     </form>
+    <div class="login-help"><span class="login-help-icon" aria-hidden="true">i</span><span>Acesse com seu usuário e senha cadastrados pelo Administrador.</span></div>
   </div>
+  <div class="login-footer">João Azevedo <span>•</span> 2026</div>
 </div>
 
 <header aria-label="O Estoquista"><div class="brand"><span class="brand-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 7.5 12 4l8 3.5v9L12 20l-8-3.5z"/><path d="M4 7.5 12 11l8-3.5M12 11v9"/></svg></span><span>O Estoquista</span></div><small>Controle de estoque,<br>requisições, entradas e saídas</small></header>
@@ -227,7 +240,7 @@
 </section>
 
 <section id="inventario" class="view"><div class="page-head"><div><h2>📋 Inventário</h2><div class="muted">Compare o estoque do sistema com a contagem física e registre os ajustes.</div></div><button class="secondary" type="button" onclick="renderInventario()">Atualizar</button></div>
-<div class="card inventory-info"><div><strong>Como funciona</strong><p class="muted">Informe a quantidade encontrada fisicamente. O sistema calcula a diferença e, ao aplicar, ajusta o estoque e registra a movimentação.</p></div><div class="inventory-date"><label>Data do inventário</label><input id="inventarioData" type="date"></div></div>
+<div class="card inventory-info"><div><strong>Como funciona</strong><p class="muted">Informe a quantidade encontrada fisicamente. O sistema calcula a diferença e, ao aplicar, ajusta o estoque e registra a movimentação.</p></div><div class="inventory-print-tools"><div class="inventory-date"><label>Data do inventário</label><input id="inventarioData" type="date"></div><div><label for="inventarioCategoriaImpressao">Categoria para impressão</label><select id="inventarioCategoriaImpressao"><option value="">Todas as categorias</option></select></div><button class="secondary" type="button" onclick="imprimirInventarioCategoria()">🖨️ Imprimir categoria</button></div></div>
 <div class="card"><div class="inventory-head"><div><h3>Contagem física</h3><span id="inventarioResumo" class="muted"></span></div><button class="green" type="button" data-stock-action="1" onclick="aplicarInventario()">✓ Aplicar inventário</button></div><div id="inventarioTable" class="inventory-table"></div></div>
 <div class="card"><div class="inventory-head"><div><h3>Histórico de inventários</h3><span id="inventarioHistoricoCount" class="muted"></span></div></div><div id="inventarioHistorico"></div></div></section>
 
