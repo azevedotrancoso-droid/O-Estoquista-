@@ -145,32 +145,29 @@ async function login(){
   const pass=document.getElementById("loginPass").value||"";
   const err=document.getElementById("loginError");
   if(!user||!pass){
-    if(err){err.textContent="Informe usuário e senha.";err.style.display="block";}
+    if(err){err.textContent="Informe e-mail e senha.";err.style.display="block";}
+    return;
+  }
+  if(!user.includes("@")){
+    if(err){err.textContent="Digite o e-mail cadastrado (exemplo: nome@empresa.com).";err.style.display="block";}
+    document.getElementById("loginUser").focus();
     return;
   }
   if(!supabaseClient){
     if(err){err.textContent="Não foi possível carregar o servidor online.";err.style.display="block";}
     return;
   }
-  let email=user;
+  const email=user.toLowerCase();
   try{
-    if(!user.includes("@")){
-      const {data:profileLookup,error:lookupError}=await supabaseClient.from("profiles")
-        .select("email,ativo").eq("login",user.toLowerCase()).maybeSingle();
-      if(lookupError)throw lookupError;
-      if(!profileLookup?.email || profileLookup.ativo===false)throw new Error("Usuário não encontrado ou inativo.");
-      email=profileLookup.email;
-    }
     const {data,error}=await supabaseClient.auth.signInWithPassword({email,password:pass});
     if(error)throw error;
     await syncCloudAfterLogin(data.user);
     const profile=db.users.find(u=>String(u.id)===String(data.user.id))||
-      db.users.find(u=>String(u.login||"").toLowerCase()===user.toLowerCase())||
-      db.users.find(u=>String(u.email||"").toLowerCase()===String(email).toLowerCase());
+      db.users.find(u=>String(u.email||"").toLowerCase()===email);
     if(!profile||profile.ativo===false)throw new Error("Perfil não encontrado ou inativo.");
     sessionStorage.setItem("o_estoquista_logged","1");
-    sessionStorage.setItem("o_estoquista_user",profile.login||user);
-    registrarAuditoria("Login","Entrada no sistema",`Usuário: ${profile.login||user}`);
+    sessionStorage.setItem("o_estoquista_user",profile.login||email);
+    registrarAuditoria("Login","Entrada no sistema",`Usuário: ${profile.login||email}`);
     persist();
     document.getElementById("loginScreen").style.display="none";
     if(err)err.style.display="none";
@@ -178,7 +175,7 @@ async function login(){
   }catch(e){
     console.error("Falha no login online:",e);
     if(err){
-      err.textContent="Usuário ou senha inválidos, ou não foi possível conectar ao servidor.";
+      err.textContent="E-mail ou senha inválidos, ou não foi possível conectar ao servidor.";
       err.style.display="block";
     }
     document.getElementById("loginPass").value="";

@@ -24,10 +24,10 @@
     <p class="lg-sub">Acesso online &bull; Controle de estoque e requisições</p>
     <div id="loginError" class="login-error" role="alert"></div>
     <form id="loginForm" onsubmit="event.preventDefault();login();">
-      <label class="lg-label" for="loginUser">USUÁRIO OU E-MAIL</label>
+      <label class="lg-label" for="loginUser">E-MAIL</label>
       <div class="lg-field">
-        <svg class="lg-ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 3.6-7 8-7s8 3 8 7"/></svg>
-        <input class="lg-input" id="loginUser" type="text" autocomplete="username" autocapitalize="none" spellcheck="false" placeholder="usuario ou usuario@exemplo.com" required>
+        <svg class="lg-ico" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/></svg>
+        <input class="lg-input" id="loginUser" type="email" inputmode="email" autocomplete="username" autocapitalize="none" spellcheck="false" placeholder="usuario@exemplo.com" required>
       </div>
       <label class="lg-label" for="loginPass">SENHA</label>
       <div class="lg-field">
