@@ -280,6 +280,28 @@ function isAdmin(){
   return perfil==="administrador" || String(u.login||"").trim().toLowerCase()==="admin";
 }
 function canDelete(){ return isAdmin(); }
+/* ===== Perfis com escopo restrito: RH (somente Uniformes) e Bar (somente Bebidas) ===== */
+const CATEGORIA_RH="Uniformes";
+function semAcento(t){return String(t||"").normalize("NFD").replace(/[\u0300-\u036f]/g,"").trim().toLowerCase();}
+function perfilAtual(){
+  const u=currentUser();
+  if(!u)return "";
+  if(String(u.login||"").trim().toLowerCase()==="admin")return "administrador";
+  return String(u.perfil||"").trim().toLowerCase();
+}
+function isRH(){return perfilAtual()==="rh";}
+function isBar(){return perfilAtual()==="bar";}
+function ehCategoriaRH(c){return semAcento(c)==="uniformes";}
+function produtoVisivel(p){return !isRH()||ehCategoriaRH(p&&p.categoria);}
+function abasPermitidas(){
+  if(isRH())return ["produtos","inventario"];
+  if(isBar())return ["bebidas"];
+  return null;
+}
+function viewPermitida(v){const a=abasPermitidas();return !a||a.includes(v);}
+function canEditProdutos(){return canEditStock()||isRH();}
+function canOperateBebidas(){return canOperateStock()||isBar();}
+function canDeleteBebidas(){return canDelete()||isBar();}
 function denyDelete(){ alert("⛔ Seu perfil não tem permissão para excluir ou apagar dados. Apenas Administradores podem realizar essa ação."); }
 
 const KEY="o_estoquista_v1";
@@ -298,7 +320,7 @@ if(!Array.isArray(db.destilados))db.destilados=[];
 if(!Array.isArray(db.drinks))db.drinks=[];
 if(!Array.isArray(db.categorias))db.categorias=[];
 db.produtos.forEach(p=>{ if(!Number.isFinite(Number(p.ideal))) p.ideal=Math.max(Number(p.min)||0,(Number(p.min)||0)*2); });
-const CATEGORIAS_PADRAO=["Camara Fria","Estoque Seco","Destilados","Limpeza","Refrigerantes","Cervejas e chopp"];
+const CATEGORIAS_PADRAO=["Camara Fria","Estoque Seco","Destilados","Limpeza","Refrigerantes","Cervejas e chopp","Uniformes"];
 const categoriasLegadas=[...db.produtos.map(p=>String(p.categoria||"").trim()).filter(Boolean)];
 db.categorias=[...new Set([...CATEGORIAS_PADRAO,...db.categorias.map(x=>String(x||"").trim()).filter(Boolean),...categoriasLegadas])];
 
@@ -353,7 +375,7 @@ function registrarAuditoria(tipo,acao,detalhes){
   db.auditoria.unshift({id:id(),dataHora:new Date().toISOString(),data:hojeISO(),usuario:usuarioAtualNome(),tipo,acao,detalhes:String(detalhes||'')});
   if(db.auditoria.length>2000)db.auditoria=db.auditoria.slice(0,2000);
 }
-function canOperateStock(){const u=currentUser();return !!u && String(u.perfil||'').trim().toLowerCase()!=='consulta';}
+function canOperateStock(){const u=currentUser();return !!u && !['consulta','rh','bar'].includes(perfilAtual());}
 function denyOperate(){alert('⛔ Seu perfil não possui permissão para realizar ajustes de estoque.');}
 
 function applyPermissions(){
@@ -367,8 +389,24 @@ function applyPermissions(){
  });
  const podeEditar=canEditStock();
  document.querySelectorAll('[data-stock-action="1"]').forEach(el=>{
-   el.style.display=podeEditar?"":"none";
+   const liberado=podeEditar||(isRH()&&el.dataset.rhAction==="1")||(isBar()&&el.dataset.barAction==="1");
+   el.style.display=liberado?"":"none";
  });
+ // Perfis restritos (RH / Bar) só enxergam as abas liberadas para eles.
+ const abas=abasPermitidas();
+ document.querySelectorAll("nav button").forEach(b=>{
+   if(abas){b.style.display=abas.includes(b.dataset.view)?"":"none";}
+   else if(b.dataset.adminOnly!=="1"){b.style.display="";}
+ });
+ if(abas){
+   const ativa=document.querySelector(".view.active");
+   if(!ativa||!abas.includes(ativa.id)){
+     document.querySelectorAll(".view").forEach(v=>v.classList.remove("active"));
+     const destino=document.getElementById(abas[0]);
+     if(destino)destino.classList.add("active");
+     document.querySelectorAll("nav button").forEach(b=>b.classList.toggle("active",b.dataset.view===abas[0]));
+   }
+ }
  // Se um usuário não autorizado estiver com uma tela restrita aberta,
  // devolve-o imediatamente para o início.
  const active=document.querySelector('.view.active');
@@ -489,13 +527,15 @@ function normalizarCategoriasProdutos(){
 }
 function renderCategoriasUI(){
   normalizarCategoriasProdutos();
-  const cats=db.categorias.slice().sort((a,b)=>a.localeCompare(b,'pt-BR'));
+  let cats=db.categorias.slice().sort((a,b)=>a.localeCompare(b,'pt-BR'));
+  if(isRH())cats=cats.filter(ehCategoriaRH);
   const pSel=document.getElementById('pCategoria');
   const filtro=document.getElementById('filtroCategoriaProduto');
   const atualP=pSel?.value||''; const atualF=filtro?.value||'';
   if(pSel)pSel.innerHTML='<option value="">Selecione a categoria</option>'+cats.map(c=>`<option value="${esc(c)}">${esc(c)}</option>`).join('');
   if(filtro)filtro.innerHTML='<option value="">Todas as categorias</option>'+cats.map(c=>`<option value="${esc(c)}">${esc(c)}</option>`).join('');
   if(pSel && cats.includes(atualP))pSel.value=atualP;
+  if(pSel){if(isRH()){pSel.value=cats[0]||'';pSel.disabled=true;}else{pSel.disabled=false;}}
   if(filtro && cats.includes(atualF))filtro.value=atualF;
 }
 function criarCategoria(){
@@ -518,16 +558,17 @@ function renderProdutos(){
  const termo=(document.getElementById("buscaProduto")?.value||"").toLowerCase().trim();
  const filtro=document.getElementById("filtroProduto")?.value||"todos";
  const filtroCategoria=document.getElementById("filtroCategoriaProduto")?.value||"";
- let lista=db.produtos.filter(p=>{
+ const visiveis=db.produtos.filter(produtoVisivel);
+  let lista=visiveis.filter(p=>{
    const nome=String(p.nome||"");
    const match=!termo || nome.toLowerCase().includes(termo) || String(p.cod||"").toLowerCase().includes(termo);
    const baixo=p.estoque<=p.min;
    return match && (filtro==="todos" || (filtro==="baixo"&&baixo) || (filtro==="normal"&&!baixo)) && (!filtroCategoria || (p.categoria||"")===filtroCategoria);
  });
- const baixos=db.produtos.filter(p=>p.estoque<=p.min).length;
- const norm=db.produtos.length-baixos;
+ const baixos=visiveis.filter(p=>p.estoque<=p.min).length;
+ const norm=visiveis.length-baixos;
  const resumo=document.getElementById("prodResumo");
- if(resumo) resumo.innerHTML=`<span class="summary-pill">📦 ${db.produtos.length} produtos</span><span class="summary-pill">🚨 ${baixos} com estoque baixo</span><span class="summary-pill">✅ ${norm} normais</span>`;
+ if(resumo) resumo.innerHTML=`<span class="summary-pill">📦 ${visiveis.length} produtos</span><span class="summary-pill">🚨 ${baixos} com estoque baixo</span><span class="summary-pill">✅ ${norm} normais</span>`;
  if(!lista.length){
    prodTable.innerHTML='<div class="empty-products">🔎 Nenhum produto encontrado com os filtros atuais.</div>';
    return;
@@ -537,14 +578,11 @@ function renderProdutos(){
      const baixo=p.estoque<=p.min;
      return `<tr>
        <td><div class="product-name">${esc(p.nome)}</div><div class="product-code">${p.cod?("Código: "+esc(p.cod)):"Sem código"}</div></td>
-       <td>
-<select class="product-category-select" data-product-id="${esc(p.id)}"
-  onchange="alterarCategoriaProduto(this.dataset.productId,this.value)" onkeydown="event.stopPropagation()"
-  onclick="event.stopPropagation()" title="Alterar categoria">
-<option value="">Sem categoria</option>
-${db.categorias.slice().sort((a,b)=>a.localeCompare(b,'pt-BR')).map(c=>`<option value="${esc(c)}" ${p.categoria===c?"selected":""}>${esc(c)}</option>`).join("")}
-</select>
-</td>
+       <td>${p.categoria
+          ? `<span class="badge category-locked" title="A categoria não pode ser alterada depois que o produto é cadastrado">🔒 ${esc(p.categoria)}</span>`
+          : (canEditStock()
+              ? `<select class="product-category-select" data-product-id="${esc(p.id)}" onchange="alterarCategoriaProduto(this.dataset.productId,this.value)" onkeydown="event.stopPropagation()" onclick="event.stopPropagation()" title="Defina a categoria (só pode ser definida uma vez)"><option value="">Sem categoria</option>${db.categorias.slice().sort((a,b)=>a.localeCompare(b,'pt-BR')).map(c=>`<option value="${esc(c)}">${esc(c)}</option>`).join("")}</select>`
+              : `<span class="muted">Sem categoria</span>`)}</td>
        <td><b>${esc(p.un)}</b></td>
        <td><span class="stock-number ${baixo?"stock-low":"stock-normal"}">${p.estoque}</span></td>
        <td>${p.min}</td>
@@ -557,11 +595,12 @@ ${db.categorias.slice().sort((a,b)=>a.localeCompare(b,'pt-BR')).map(c=>`<option 
 }
 
 function addProduto(){
-  if(!canEditStock())return denyOperate();
+  if(!canEditProdutos())return denyOperate();
   const nome = (document.getElementById("pNome")?.value || "").trim();
   const cod = (document.getElementById("pCod")?.value || "").trim();
   const un = document.getElementById("pUn")?.value || "UN";
-  const categoria = document.getElementById("pCategoria")?.value || "";
+  let categoria = document.getElementById("pCategoria")?.value || "";
+  if(isRH())categoria=CATEGORIA_RH; // RH só cadastra produtos de Uniformes
   const estoque = Number(document.getElementById("pEst")?.value || 0);
   const min = Number(document.getElementById("pMin")?.value || 0);
   const idealInput=(document.getElementById("pIdeal")?.value||"").trim();
@@ -586,7 +625,7 @@ function addProduto(){
 
   document.getElementById("pNome").value="";
   document.getElementById("pCod").value="";
-  document.getElementById("pCategoria").value="";
+  document.getElementById("pCategoria").value=isRH()?CATEGORIA_RH:"";
   document.getElementById("pEst").value=0;
   document.getElementById("pMin").value=0;
   if(document.getElementById("pIdeal"))document.getElementById("pIdeal").value=0;
@@ -763,7 +802,14 @@ function alterarCategoriaProduto(i,categoria){
   if(!canEditStock())return denyOperate();
   const p = db.produtos.find(x=>String(x.id)===String(i));
   if(!p) return;
-  p.categoria = categoria || "";
+  if(String(p.categoria||"").trim()){
+    alert("🔒 A categoria de um produto não pode ser alterada depois do cadastro.");
+    renderProdutos();
+    return;
+  }
+  if(!categoria){renderProdutos();return;}
+  p.categoria = categoria;
+  registrarAuditoria("Produto","Definiu categoria",`${p.nome} · Categoria: ${categoria}`);
   save();
   renderProdutos();
 }
@@ -874,7 +920,7 @@ async function addUser(){
  if(login.length<3)return alert("O usuário deve ter pelo menos 3 caracteres.");
  if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))return alert("Informe um e-mail válido.");
  if(senha.length<6)return alert("A senha deve ter pelo menos 6 caracteres.");
- if(!["Administrador","Estoquista","Consulta"].includes(perfil))return alert("Perfil inválido.");
+ if(!["Administrador","Estoquista","Consulta","RH","Bar"].includes(perfil))return alert("Perfil inválido.");
  if(db.users.some(u=>String(u.login||"").trim().toLowerCase()===login))return alert("Esse usuário já está cadastrado.");
  if(db.users.some(u=>String(u.email||"").trim().toLowerCase()===email))return alert("Esse e-mail já está cadastrado.");
  const btn=document.getElementById("userSaveBtn");
@@ -981,7 +1027,7 @@ async function saveUserEdit(i){
  const perfil=document.getElementById("uPerfil").value;
  if(!nome)return alert("Informe o nome.");
  if(senha&&senha.length<6)return alert("A nova senha deve ter pelo menos 6 caracteres.");
- if(!["Administrador","Estoquista","Consulta"].includes(perfil))return alert("Perfil inválido.");
+ if(!["Administrador","Estoquista","Consulta","RH","Bar"].includes(perfil))return alert("Perfil inválido.");
  const payload={action:"update",id:u.id,nome,perfil};
  if(senha)payload.senha=senha;
  const btn=document.getElementById("userSaveBtn");
@@ -1047,7 +1093,7 @@ function renderInventario(){
  const dataEl=document.getElementById('inventarioData'); if(dataEl&&!dataEl.value)dataEl.value=hojeISO();
  normalizarCategoriasProdutos();
  const box=document.getElementById('inventarioTable'); if(!box)return;
- const lista=db.produtos.slice().sort((a,b)=>String(a.nome).localeCompare(String(b.nome),'pt-BR'));
+ const lista=db.produtos.filter(produtoVisivel).sort((a,b)=>String(a.nome).localeCompare(String(b.nome),'pt-BR'));
  const categorias=[...new Set(lista.map(p=>String(p.categoria||'Sem categoria').trim()||'Sem categoria'))].sort((a,b)=>a.localeCompare(b,'pt-BR'));
  const totalCategorias=categorias.length;
  const grupos=categorias.map(cat=>({cat,items:lista.filter(p=>(String(p.categoria||'Sem categoria').trim()||'Sem categoria')===cat)}));
@@ -1068,11 +1114,11 @@ function renderInventario(){
  const selCat=document.getElementById('inventarioCategoriaImpressao');
  if(selCat){
    const atual=selCat.value||'__todas__';
-   selCat.innerHTML='<option value="__todas__">Todas as categorias</option>'+grupos.map(g=>`<option value="${esc(g.cat)}">${esc(g.cat)} (${g.items.length})</option>`).join('');
-   selCat.value=[...selCat.options].some(o=>o.value===atual)?atual:'__todas__';
+   selCat.innerHTML=(isRH()?'':'<option value="__todas__">Todas as categorias</option>')+grupos.map(g=>`<option value="${esc(g.cat)}">${esc(g.cat)} (${g.items.length})</option>`).join('');
+   selCat.value=[...selCat.options].some(o=>o.value===atual)?atual:(selCat.options[0]?.value||'__todas__');
  }
  const resumo=document.getElementById('inventarioResumo');if(resumo)resumo.textContent=`${lista.length} produto(s) · ${totalCategorias} categoria(s) · informe apenas os itens contados`;
- const hist=Array.isArray(db.inventarios)?db.inventarios.slice().sort((a,b)=>String(b.dataHora).localeCompare(String(a.dataHora))):[];const hc=document.getElementById('inventarioHistoricoCount');if(hc)hc.textContent=`${hist.length} registro(s)`;const hb=document.getElementById('inventarioHistorico');if(hb)hb.innerHTML=hist.length?`<div class="product-table-wrap"><table><tr><th>Data</th><th>Categoria</th><th>Produto</th><th>Sistema</th><th>Físico</th><th>Diferença</th><th>Usuário</th>${isAdmin()?'<th>Ações</th>':''}</tr>${hist.slice(0,100).map(x=>`<tr><td>${esc(x.data)}</td><td>${esc(x.categoria||'Sem categoria')}</td><td>${esc(x.prod)}</td><td>${x.sistema}</td><td>${x.fisico}</td><td><strong>${x.diferenca>0?'+':''}${x.diferenca}</strong></td><td>${esc(x.usuario||'')}</td>${isAdmin()?`<td><button class="inventory-delete-btn" type="button" onclick="apagarInventario('${x.id}')" title="Excluir inventário" aria-label="Excluir inventário"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M19 6l-1 15H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/></svg><span>Excluir</span></button></td>`:''}</tr>`).join('')}</table></div>`:'<div class="empty-products">Nenhum inventário registrado.</div>';
+ const hist=Array.isArray(db.inventarios)?db.inventarios.filter(x=>!isRH()||ehCategoriaRH(x.categoria)).sort((a,b)=>String(b.dataHora).localeCompare(String(a.dataHora))):[];const hc=document.getElementById('inventarioHistoricoCount');if(hc)hc.textContent=`${hist.length} registro(s)`;const hb=document.getElementById('inventarioHistorico');if(hb)hb.innerHTML=hist.length?`<div class="product-table-wrap"><table><tr><th>Data</th><th>Categoria</th><th>Produto</th><th>Sistema</th><th>Físico</th><th>Diferença</th><th>Usuário</th>${isAdmin()?'<th>Ações</th>':''}</tr>${hist.slice(0,100).map(x=>`<tr><td>${esc(x.data)}</td><td>${esc(x.categoria||'Sem categoria')}</td><td>${esc(x.prod)}</td><td>${x.sistema}</td><td>${x.fisico}</td><td><strong>${x.diferenca>0?'+':''}${x.diferenca}</strong></td><td>${esc(x.usuario||'')}</td>${isAdmin()?`<td><button class="inventory-delete-btn" type="button" onclick="apagarInventario('${x.id}')" title="Excluir inventário" aria-label="Excluir inventário"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M19 6l-1 15H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/></svg><span>Excluir</span></button></td>`:''}</tr>`).join('')}</table></div>`:'<div class="empty-products">Nenhum inventário registrado.</div>';
 }
 
 function apagarInventario(inventarioId){
@@ -1087,7 +1133,7 @@ function apagarInventario(inventarioId){
 }
 
 function aplicarInventario(){
- if(!canEditStock())return denyOperate();
+ if(!canEditProdutos())return denyOperate();
  const data=document.getElementById('inventarioData')?.value||hojeISO();
  const inputs=[...document.querySelectorAll('.inventory-count-input')].filter(x=>x.value!=='');
  if(!inputs.length)return alert('Informe pelo menos uma contagem física.');
@@ -1096,6 +1142,7 @@ function aplicarInventario(){
    const p=db.produtos.find(x=>String(x.id)===String(el.dataset.prodId));
    const fisico=Number(el.value);
    if(!p)return alert('Um dos produtos da contagem não foi encontrado. Nenhuma alteração foi aplicada.');
+    if(!produtoVisivel(p))return alert('Seu perfil só pode inventariar a categoria Uniformes. Nenhuma alteração foi aplicada.');
    if(!Number.isFinite(fisico)||fisico<0)return alert(`A contagem física de ${p.nome} é inválida. Nenhuma alteração foi aplicada.`);
    const sistema=Number(p.estoque)||0;
    conferencias.push({p,fisico,sistema,dif:arred(fisico-sistema)});
@@ -1220,7 +1267,7 @@ function renderAnaliseCMV(){
 
 function imprimirInventario(){
   const catDe=p=>String(p.categoria||'Sem categoria').trim()||'Sem categoria';
-  const produtos=Array.isArray(db.produtos)?db.produtos:[];
+  const produtos=Array.isArray(db.produtos)?db.produtos.filter(produtoVisivel):[];
   const escolha=document.getElementById('inventarioCategoriaImpressao')?.value||'__todas__';
   let categorias=[...new Set(produtos.map(catDe))].sort((x,y)=>x.localeCompare(y,'pt-BR'));
   if(escolha!=='__todas__')categorias=categorias.filter(c=>c===escolha);
@@ -1392,7 +1439,7 @@ function updateBebDestCost(){
   const el=document.getElementById('bebDestCustoMl'); if(el)el.textContent=moedaBebida(vol>0?preco/vol:0).replace(/(,\d{2})$/,'$1')+' / ml';
 }
 function addDestilado(){
-  if(!canOperateStock()){denyOperate();return;}
+  if(!canOperateBebidas()){denyOperate();return;}
   const nome=(document.getElementById('bebDestNome').value||'').trim(),marca=(document.getElementById('bebDestMarca').value||'').trim(),volume=bebidaNumero(document.getElementById('bebDestVolume').value),preco=bebidaNumero(document.getElementById('bebDestPreco').value),categoria=document.getElementById('bebDestCategoria').value;
   if(!nome)return alert('Informe o nome do destilado.');
   if(volume<=0)return alert('Informe um volume de garrafa válido.');
@@ -1403,7 +1450,7 @@ function addDestilado(){
   save();
 }
 function deleteDestilado(i){
-  if(!canDelete()){denyDelete();return;}
+  if(!canDeleteBebidas()){denyDelete();return;}
   const d=db.destilados.find(x=>String(x.id)===String(i));if(!d)return;
   if(db.drinks.some(dr=>(dr.ingredientes||[]).some(it=>it.tipo==='destilado'&&String(it.refId)===String(i))))return alert('Este destilado está sendo usado em uma ou mais fichas técnicas. Remova-o das fichas antes de excluir.');
   if(!confirm(`Excluir o destilado "${d.nome}"?`))return;
@@ -1422,7 +1469,7 @@ function renderBebDestSelect(){
   sel.innerHTML='<option value="">Selecione o destilado...</option>'+db.destilados.map(d=>`<option value="${d.id}">${esc(d.nome)}${d.marca?' · '+esc(d.marca):''} — ${d.volumeMl} ml</option>`).join('');if(db.destilados.some(d=>String(d.id)===String(old)))sel.value=old;
 }
 function addBebIngredient(){
-  if(!canOperateStock()){denyOperate();return;}
+  if(!canOperateBebidas()){denyOperate();return;}
   const tipo=document.getElementById('bebIngTipo').value,qtd=bebidaNumero(document.getElementById('bebIngQtd').value),un=document.getElementById('bebIngUn').value;
   if(qtd<=0)return alert('Informe uma quantidade válida.');
   let item;
@@ -1452,7 +1499,7 @@ function renderDrinkPreview(){
 }
 function usarPrecoSugerido(){const alvo=Math.min(99.99,Math.max(0,bebidaNumero(document.getElementById('bebDrinkMargemAlvo')?.value)||70)),rendimento=Math.max(1,bebidaNumero(document.getElementById('bebDrinkRendimento')?.value)||1),custo=custoDrinkIngredientes()/rendimento,preco=alvo<100?custo/(1-alvo/100):0;const campo=document.getElementById('bebDrinkVenda');if(campo&&preco>0){campo.value=preco.toFixed(2);renderDrinkPreview();}}
 function saveDrink(){
-  if(!canOperateStock()){denyOperate();return;}
+  if(!canOperateBebidas()){denyOperate();return;}
   const nome=(document.getElementById('bebDrinkNome').value||'').trim(),categoria=document.getElementById('bebDrinkCategoria').value,precoVenda=bebidaNumero(document.getElementById('bebDrinkVenda').value),margemAlvo=Math.min(99.99,Math.max(0,bebidaNumero(document.getElementById('bebDrinkMargemAlvo').value)||70)),rendimento=Math.max(1,bebidaNumero(document.getElementById('bebDrinkRendimento').value)||1),descricao=(document.getElementById('bebDrinkDescricao').value||'').trim();
   if(!nome)return alert('Informe o nome do drink.');if(!bebidaIngredientes.length)return alert('Adicione pelo menos um ingrediente.');if(precoVenda<=0)return alert('Informe o preço de venda.');
   const dados={nome,categoria,precoVenda,margemAlvo,rendimento,descricao,ingredientes:bebidaIngredientes.map(x=>({...x})),atualizadoEm:new Date().toISOString()};
@@ -1461,13 +1508,13 @@ function saveDrink(){
 }
 function editDrink(i){const dr=db.drinks.find(x=>String(x.id)===String(i));if(!dr)return;editingDrinkId=dr.id;bebidaIngredientes=(dr.ingredientes||[]).map(x=>({...x}));document.getElementById('bebDrinkNome').value=dr.nome||'';document.getElementById('bebDrinkCategoria').value=dr.categoria||'Outro';document.getElementById('bebDrinkVenda').value=dr.precoVenda||'';document.getElementById('bebDrinkMargemAlvo').value=dr.margemAlvo??70;document.getElementById('bebDrinkRendimento').value=dr.rendimento||1;document.getElementById('bebDrinkDescricao').value=dr.descricao||'';document.getElementById('bebDrinkSaveBtn').textContent='💾 Salvar alterações';document.getElementById('bebDrinkCancelBtn').style.display='inline-block';renderBebIngredientes();renderDrinkPreview();document.getElementById('bebDrinkNome').focus();}
 function cancelDrinkEdit(silent=false){editingDrinkId=null;bebidaIngredientes=[];['bebDrinkNome','bebDrinkVenda','bebDrinkDescricao'].forEach(id=>{const e=document.getElementById(id);if(e)e.value='';});const alvo=document.getElementById('bebDrinkMargemAlvo');if(alvo)alvo.value=70;const rend=document.getElementById('bebDrinkRendimento');if(rend)rend.value=1;const btn=document.getElementById('bebDrinkSaveBtn');if(btn)btn.textContent='🍸 Salvar ficha técnica';const cancel=document.getElementById('bebDrinkCancelBtn');if(cancel)cancel.style.display='none';renderBebIngredientes();renderDrinkPreview();if(!silent)renderBebidas();}
-function deleteDrink(i){if(!canDelete()){denyDelete();return;}const dr=db.drinks.find(x=>String(x.id)===String(i));if(!dr)return;if(!confirm(`Excluir a ficha técnica de "${dr.nome}"?`))return;db.drinks=db.drinks.filter(x=>String(x.id)!==String(i));registrarAuditoria('Bebidas','Excluiu ficha técnica',dr.nome);save();}
+function deleteDrink(i){if(!canDeleteBebidas()){denyDelete();return;}const dr=db.drinks.find(x=>String(x.id)===String(i));if(!dr)return;if(!confirm(`Excluir a ficha técnica de "${dr.nome}"?`))return;db.drinks=db.drinks.filter(x=>String(x.id)!==String(i));registrarAuditoria('Bebidas','Excluiu ficha técnica',dr.nome);save();}
 function renderBebidas(){
   renderBebDestSelect();updateBebIngredientFields();updateBebDestCost();
-  const dt=document.getElementById('bebDestTable'),ds=db.destilados||[];if(dt)dt.innerHTML=ds.length?`<div class="drink-table-title">Destilados cadastrados</div><div class="drink-mini-table"><div class="drink-mini-head"><span>Destilado</span><span>Volume</span><span>Compra</span><span>Custo/ml</span><span>Ação</span></div>${ds.map(d=>`<div class="drink-mini-row"><span><strong>${esc(d.nome)}</strong><small>${esc(d.marca||d.categoria||'')}</small></span><span>${d.volumeMl} ml</span><span>${moedaBebida(d.preco)}</span><span>${moedaBebida(bebidaCustoMl(d))}</span><span>${canDelete()?`<button class="drink-remove" onclick="deleteDestilado('${d.id}')">Excluir</button>`:'—'}</span></div>`).join('')}</div>`:'<div class="drink-empty">Nenhum destilado cadastrado.</div>';
+  const dt=document.getElementById('bebDestTable'),ds=db.destilados||[];if(dt)dt.innerHTML=ds.length?`<div class="drink-table-title">Destilados cadastrados</div><div class="drink-mini-table"><div class="drink-mini-head"><span>Destilado</span><span>Volume</span><span>Compra</span><span>Custo/ml</span><span>Ação</span></div>${ds.map(d=>`<div class="drink-mini-row"><span><strong>${esc(d.nome)}</strong><small>${esc(d.marca||d.categoria||'')}</small></span><span>${d.volumeMl} ml</span><span>${moedaBebida(d.preco)}</span><span>${moedaBebida(bebidaCustoMl(d))}</span><span>${canDeleteBebidas()?`<button class="drink-remove" onclick="deleteDestilado('${d.id}')">Excluir</button>`:'—'}</span></div>`).join('')}</div>`:'<div class="drink-empty">Nenhum destilado cadastrado.</div>';
   const q=(document.getElementById('bebDrinkBusca')?.value||'').toLowerCase().trim(),all=(db.drinks||[]).filter(d=>!q||`${d.nome} ${d.categoria}`.toLowerCase().includes(q));
   const count=document.getElementById('bebDrinksCountLabel');if(count)count.textContent=`${all.length} drink(s)`;
-  const dc=document.getElementById('bebDrinksTable');if(dc)dc.innerHTML=all.length?all.map(dr=>{const c=drinkCalculos(dr);return `<article class="drink-card"><div class="drink-card-top"><div><h4>${esc(dr.nome)}</h4><span>${esc(dr.categoria||'Outro')} · Rendimento: ${dr.rendimento||1}</span></div><span class="drink-margin-badge">Margem ${c.margem.toFixed(2).replace('.',',')}%</span></div><div class="drink-card-desc">${esc(dr.descricao||'Sem descrição.')}</div><div class="drink-card-metrics"><div><small>Custo</small><strong>${moedaBebida(c.custo)}</strong></div><div><small>Venda</small><strong>${moedaBebida(c.venda)}</strong></div><div><small>Lucro</small><strong class="${c.lucro>=0?'profit-positive':'profit-negative'}">${moedaBebida(c.lucro)}</strong></div><div><small>Ingredientes</small><strong>${(dr.ingredientes||[]).length}</strong></div></div><div class="drink-card-ingredients">${(dr.ingredientes||[]).map(it=>`<span>${esc(it.nome)} · ${it.qtd} ${esc(it.un)}</span>`).join('')}</div><div class="drink-card-actions"><button class="secondary" onclick="editDrink('${dr.id}')">✏️ Editar</button>${canDelete()?`<button class="drink-remove" onclick="deleteDrink('${dr.id}')">🗑️ Excluir</button>`:''}</div></article>`}).join(''):'<div class="drink-empty">Nenhuma ficha técnica cadastrada.</div>';
+  const dc=document.getElementById('bebDrinksTable');if(dc)dc.innerHTML=all.length?all.map(dr=>{const c=drinkCalculos(dr);return `<article class="drink-card"><div class="drink-card-top"><div><h4>${esc(dr.nome)}</h4><span>${esc(dr.categoria||'Outro')} · Rendimento: ${dr.rendimento||1}</span></div><span class="drink-margin-badge">Margem ${c.margem.toFixed(2).replace('.',',')}%</span></div><div class="drink-card-desc">${esc(dr.descricao||'Sem descrição.')}</div><div class="drink-card-metrics"><div><small>Custo</small><strong>${moedaBebida(c.custo)}</strong></div><div><small>Venda</small><strong>${moedaBebida(c.venda)}</strong></div><div><small>Lucro</small><strong class="${c.lucro>=0?'profit-positive':'profit-negative'}">${moedaBebida(c.lucro)}</strong></div><div><small>Ingredientes</small><strong>${(dr.ingredientes||[]).length}</strong></div></div><div class="drink-card-ingredients">${(dr.ingredientes||[]).map(it=>`<span>${esc(it.nome)} · ${it.qtd} ${esc(it.un)}</span>`).join('')}</div><div class="drink-card-actions"><button class="secondary" onclick="editDrink('${dr.id}')">✏️ Editar</button>${canDeleteBebidas()?`<button class="drink-remove" onclick="deleteDrink('${dr.id}')">🗑️ Excluir</button>`:''}</div></article>`}).join(''):'<div class="drink-empty">Nenhuma ficha técnica cadastrada.</div>';
   const s1=document.getElementById('bebidasDestiladosCount'),s2=document.getElementById('bebidasDrinksCount'),s3=document.getElementById('bebidasMargemMedia');if(s1)s1.textContent=ds.length;if(s2)s2.textContent=(db.drinks||[]).length;const marg=(db.drinks||[]).map(dr=>drinkCalculos(dr).margem);if(s3)s3.textContent=(marg.length?marg.reduce((a,b)=>a+b,0)/marg.length:0).toFixed(2).replace('.',',')+'%';
 }
 
@@ -1494,6 +1541,7 @@ function resetData(){
 }
 document.querySelectorAll("nav button").forEach(b=>{ b.setAttribute("type","button"); b.onclick=()=>{
   if(b.dataset.adminOnly==="1" && !isAdmin()){ alert("🔒 Acesso restrito ao Administrador."); return; }
+  if(!viewPermitida(b.dataset.view)){ alert("🔒 Seu perfil não tem acesso a esta área."); return; }
   document.querySelectorAll(".view").forEach(v=>v.classList.remove("active"));
   const view=document.getElementById(b.dataset.view);
   if(!view)return;

@@ -89,7 +89,7 @@ function toggleLoginPass(){
 <div><label>Categoria</label><select id="pCategoria"><option value="">Selecione a categoria</option></select></div>
 <div><label>Estoque inicial</label><input id="pEst" type="number" min="0" step="any" value="0" inputmode="decimal"></div>
 <div><label>Estoque mínimo</label><input id="pMin" type="number" min="0" step="any" value="0" inputmode="decimal"></div><div><label>Estoque ideal</label><input id="pIdeal" type="number" min="0" step="any" value="0" inputmode="decimal"></div>
-</div><div class="actions"><button data-stock-action="1" onclick="addProduto()">Adicionar produto</button></div>
+</div><div class="actions"><button data-stock-action="1" data-rh-action="1" onclick="addProduto()">Adicionar produto</button></div>
 <div class="category-create-box"><div><label>Nova categoria</label><input id="novaCategoria" maxlength="60" placeholder="Ex.: Congelados, Hortifruti..."></div><button type="button" data-stock-action="1" onclick="criarCategoria()">＋ Criar categoria</button></div>
 <p class="muted category-help">As categorias criadas ficam salvas no dispositivo e passam a aparecer automaticamente no cadastro, filtros e inventário.</p>
 </div>
@@ -206,7 +206,7 @@ function toggleLoginPass(){
     <div><label>Categoria</label><select id="bebDestCategoria"><option>Gin</option><option>Vodka</option><option>Whisky</option><option>Rum</option><option>Tequila</option><option>Cachaça</option><option>Licor</option><option>Vermute</option><option>Outro</option></select></div>
   </div>
   <div class="drink-cost-preview">Custo por ml: <strong id="bebDestCustoMl">R$ 0,0000</strong></div>
-  <div class="actions"><button type="button" data-stock-action="1" onclick="addDestilado()">🥃 Cadastrar destilado</button></div>
+  <div class="actions"><button type="button" data-stock-action="1" data-bar-action="1" onclick="addDestilado()">🥃 Cadastrar destilado</button></div>
   <div id="bebDestTable" class="drink-table-wrap"></div>
 </div>
 
@@ -230,13 +230,13 @@ function toggleLoginPass(){
       <input id="bebIngQtd" type="number" min="0.01" step="0.01" placeholder="Quantidade">
       <select id="bebIngUn"><option value="ml">ml</option><option value="un">un</option><option value="g">g</option><option value="kg">kg</option><option value="l">L</option></select>
       <input id="bebIngCusto" type="number" min="0" step="0.0001" placeholder="Custo unitário" style="display:none">
-      <button type="button" data-stock-action="1" onclick="addBebIngredient()">+ Adicionar</button>
+      <button type="button" data-stock-action="1" data-bar-action="1" onclick="addBebIngredient()">+ Adicionar</button>
     </div>
     <div id="bebDrinkIngredientes" class="drink-ingredients-list"></div>
   </div>
 
   <div id="bebDrinkPreview" class="drink-profit-preview"></div>
-  <div class="actions"><button type="button" data-stock-action="1" id="bebDrinkSaveBtn" onclick="saveDrink()">🍸 Salvar ficha técnica</button><button type="button" class="secondary" id="bebDrinkCancelBtn" onclick="cancelDrinkEdit()" style="display:none">Cancelar edição</button></div>
+  <div class="actions"><button type="button" data-stock-action="1" data-bar-action="1" id="bebDrinkSaveBtn" onclick="saveDrink()">🍸 Salvar ficha técnica</button><button type="button" class="secondary" id="bebDrinkCancelBtn" onclick="cancelDrinkEdit()" style="display:none">Cancelar edição</button></div>
 </div>
 
 <div class="card">
@@ -247,7 +247,7 @@ function toggleLoginPass(){
 
 <section id="inventario" class="view"><div class="page-head"><div><h2>📋 Inventário</h2><div class="muted">Compare o estoque do sistema com a contagem física e registre os ajustes.</div></div><button class="secondary" type="button" onclick="renderInventario()">Atualizar</button></div>
 <div class="card inventory-info"><div><strong>Como funciona</strong><p class="muted">Informe a quantidade encontrada fisicamente. O sistema calcula a diferença e, ao aplicar, ajusta o estoque e registra a movimentação.</p></div><div class="inventory-date"><label>Data do inventário</label><input id="inventarioData" type="date"></div></div>
-<div class="card"><div class="inventory-head"><div><h3>Contagem física</h3><span id="inventarioResumo" class="muted"></span></div><div class="inventory-actions"><select id="inventarioCategoriaImpressao" class="inventory-print-select" aria-label="Categoria para imprimir"><option value="__todas__">Todas as categorias</option></select><button class="secondary" type="button" id="btnImprimirInventario" onclick="imprimirInventario()">🖨️ Imprimir / PDF</button><button class="green" type="button" data-stock-action="1" onclick="aplicarInventario()">✓ Aplicar inventário</button></div></div><div id="inventarioTable" class="inventory-table"></div></div>
+<div class="card"><div class="inventory-head"><div><h3>Contagem física</h3><span id="inventarioResumo" class="muted"></span></div><div class="inventory-actions"><select id="inventarioCategoriaImpressao" class="inventory-print-select" aria-label="Categoria para imprimir"><option value="__todas__">Todas as categorias</option></select><button class="secondary" type="button" id="btnImprimirInventario" onclick="imprimirInventario()">🖨️ Imprimir / PDF</button><button class="green" type="button" data-stock-action="1" data-rh-action="1" onclick="aplicarInventario()">✓ Aplicar inventário</button></div></div><div id="inventarioTable" class="inventory-table"></div></div>
 <div class="card"><div class="inventory-head"><div><h3>Histórico de inventários</h3><span id="inventarioHistoricoCount" class="muted"></span></div></div><div id="inventarioHistorico"></div></div></section>
 
 <section id="cmv" class="view">
@@ -271,7 +271,7 @@ function toggleLoginPass(){
 <div class="card"><div class="report-section-head"><div><h3>Registro de atividades</h3><span id="auditoriaCount" class="muted"></span></div><button class="secondary" type="button" onclick="exportAuditoria()">📥 Exportar auditoria</button></div><div id="auditoriaTable"></div></div></section>
 
 <section id="usuarios" class="view" data-admin-only="1"><h2>Usuários</h2>
-<div class="card"><h3 id="userFormTitle">Cadastrar usuário</h3><div class="grid"><div><label>Nome</label><input id="uNome" autocomplete="name"></div><div><label>Usuário</label><input id="uLogin" autocomplete="username"></div><div><label>E-mail</label><input id="uEmail" type="email" placeholder="usuario@exemplo.com" autocomplete="email"></div><div><label>Senha</label><input id="uSenha" type="password" placeholder="Mínimo de 6 caracteres" autocomplete="new-password"></div><div><label>Perfil</label><select id="uPerfil"><option>Administrador</option><option>Estoquista</option><option>Consulta</option></select></div></div><p class="muted" style="margin:10px 0 0">A conta é criada no Supabase Auth. A senha não é armazenada no banco do Estoquista.</p><div class="actions"><button id="userSaveBtn" type="button" onclick="addUser()">Adicionar usuário</button><button id="userCancelBtn" type="button" class="secondary" onclick="cancelEditUser()" style="display:none">Cancelar edição</button></div></div>
+<div class="card"><h3 id="userFormTitle">Cadastrar usuário</h3><div class="grid"><div><label>Nome</label><input id="uNome" autocomplete="name"></div><div><label>Usuário</label><input id="uLogin" autocomplete="username"></div><div><label>E-mail</label><input id="uEmail" type="email" placeholder="usuario@exemplo.com" autocomplete="email"></div><div><label>Senha</label><input id="uSenha" type="password" placeholder="Mínimo de 6 caracteres" autocomplete="new-password"></div><div><label>Perfil</label><select id="uPerfil"><option>Administrador</option><option>Estoquista</option><option>RH</option><option>Bar</option><option>Consulta</option></select></div></div><p class="muted" style="margin:10px 0 0">A conta é criada no Supabase Auth. A senha não é armazenada no banco do Estoquista.</p><div class="actions"><button id="userSaveBtn" type="button" onclick="addUser()">Adicionar usuário</button><button id="userCancelBtn" type="button" class="secondary" onclick="cancelEditUser()" style="display:none">Cancelar edição</button></div></div>
 <div class="card"><div id="userTable"></div></div></section>
 
 <section id="menu" class="view"><h2>Menu</h2>
