@@ -1225,7 +1225,6 @@ if(document.getElementById("relatorioMes")) document.getElementById("relatorioMe
 
 document.addEventListener("DOMContentLoaded",async function(){
   try{
-    ensureAdmin();
     if(document.getElementById("noteData"))document.getElementById("noteData").value=hojeISO();
     if(document.getElementById("bebDestVolume")){
       ["bebDestVolume","bebDestPreco"].forEach(x=>document.getElementById(x).addEventListener("input",updateBebDestCost));
