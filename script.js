@@ -281,6 +281,7 @@ const rQtd=document.getElementById("rQtd");
 const rSetor=document.getElementById("rSetor");
 const rPrioridade=document.getElementById("rPrioridade");
 const rSol=document.getElementById("rSol");
+const mCategoria=document.getElementById("mCategoria");
 const mProd=document.getElementById("mProd");
 const mTipo=document.getElementById("mTipo");
 const mQtd=document.getElementById("mQtd");
@@ -418,7 +419,7 @@ function render(){
  const low=db.produtos.filter(p=>p.estoque<=p.min);sBaixo.textContent=low.length;
  baixo.innerHTML=low.length?low.map(p=>`<div class="stock-alert">🚨 ${esc(p.nome)}<small>Estoque atual: <b>${p.estoque} ${p.un}</b> · Estoque mínimo: <b>${p.min} ${p.un}</b></small></div>`).join(""):"<div class='stock-ok'>✅ Todos os produtos estão acima do estoque mínimo.</div>";
  const opts='<option value="">Selecione...</option>'+db.produtos.map(p=>`<option value="${p.id}">${esc(p.nome)} (${p.estoque} ${p.un})</option>`).join("");
- const selectedProd=rProd.value; rProd.innerHTML=opts; mProd.innerHTML=opts;
+ const selectedProd=rProd.value; rProd.innerHTML=opts; if(mCategoria){ const cats=[...new Set((db.produtos||[]).map(p=>String(p.categoria||"Sem categoria").trim()||"Sem categoria"))].sort((a,b)=>a.localeCompare(b,"pt-BR")); const selCat=mCategoria.value; mCategoria.innerHTML='<option value="">Todas as categorias</option>'+cats.map(c=>`<option value="${esc(c)}">${esc(c)}</option>`).join(""); if(cats.includes(selCat))mCategoria.value=selCat; } mProd.innerHTML=opts; if(mCategoria?.value)filtrarProdutosMovimento();
  const selectedEmp=eProd?.value; if(eProd){eProd.innerHTML=opts; if(selectedEmp && db.produtos.some(p=>String(p.id)===String(selectedEmp)))eProd.value=selectedEmp;} updateEmprestimoUnit(); if(selectedProd && db.produtos.some(p=>String(p.id)===String(selectedProd))){rProd.value=selectedProd;} updateReqUnit();
  renderCategoriasUI();
  renderProdutos();
@@ -431,6 +432,7 @@ function render(){
   renderGraficoConsumoMes();
   normalizeIcons(document.body);
   renderInventario();
+  renderAnaliseCMV();
   renderRelatorios();
   renderAuditoria();
   const userRows=db.users.map(u=>{
@@ -798,16 +800,28 @@ function renderMovimentos(){
  if(!box)return;
  box.innerHTML=lista.length?`<div class="mov-list">${lista.slice().reverse().map(m=>{const entrada=m.tipo==="entrada";return `<div class="mov-card ${entrada?'mov-entry':'mov-exit'}"><div class="mov-card-top"><div><div class="mov-product">${esc(m.prod)}</div><div class="mov-meta">${esc(formatDateBR(m.data))} · ${esc(m.un||'un.')}</div></div><span class="mov-badge ${entrada?'mov-badge-entry':'mov-badge-exit'}">${entrada?'↑ Entrada':'↓ Saída'}</span></div><div class="mov-details"><div class="mov-detail">Quantidade<strong>${m.qtd} ${esc(m.un||'')}</strong></div><div class="mov-detail">Motivo<strong>${esc(m.motivo||'Sem motivo informado')}</strong></div><div class="mov-detail">Ação<strong>${m.reqId||m.origem==="requisicao"?'🔒 Requisição entregue':(canDelete()?`<button class="mov-delete" onclick="delMov('${m.id}')">Apagar</button>`:'🔒 Sem permissão')}</strong></div></div></div>`}).join('')}</div>`:"<div class='mov-empty'>Nenhuma movimentação encontrada para este filtro.</div>";
 }
+function filtrarProdutosMovimento(){
+ const categoria=document.getElementById("mCategoria")?.value||"";
+ const select=document.getElementById("mProd");
+ if(!select)return;
+ const atual=select.value;
+ const produtos=(db.produtos||[]).filter(p=>!categoria || String(p.categoria||"Sem categoria").trim()===categoria);
+ select.innerHTML='<option value="">Selecione...</option>'+produtos.map(p=>`<option value="${p.id}">${esc(p.nome)} (${p.estoque} ${p.un})</option>`).join("");
+ if(produtos.some(p=>String(p.id)===String(atual)))select.value=atual;
+}
 function addMov(){
  if(!canEditStock())return denyOperate();
  let p=db.produtos.find(x=>String(x.id)===String(mProd.value)),q=Number(mQtd.value),tipo=mTipo.value;
+ const setor=document.getElementById('mSetor')?.value||'Bar';
+ const classificacao=document.getElementById('mClassificacao')?.value||'consumo';
  if(!p||!Number.isFinite(q)||q<1)return alert("Selecione produto e informe uma quantidade válida.");
  if(!["entrada","saida"].includes(tipo))return alert("Tipo de movimento inválido.");
  if(!mData.value)return alert("Selecione a data do movimento.");
  if(tipo==="saida"&&p.estoque<q)return alert("Estoque insuficiente.");
+ const classe=tipo==='entrada'?'consumo':classificacao;
  p.estoque+=tipo==="entrada"?q:-q;
- db.mov.push({id:id(),data:mData.value,prodId:p.id,prod:p.nome,tipo,qtd:q,un:p.un,motivo:mMot.value.trim()});
- registrarAuditoria("Movimentação",mTipo.value==="entrada"?"Lançou entrada":"Lançou saída",`${p.nome} · ${q} ${p.un} · ${mMot.value.trim()||"Sem motivo"} · Data: ${mData.value}`);
+ db.mov.push({id:id(),data:mData.value,prodId:p.id,prod:p.nome,tipo,qtd:q,un:p.un,motivo:mMot.value.trim(),setor:tipo==='saida'?setor:'',classificacao:classe});
+ registrarAuditoria("Movimentação",mTipo.value==="entrada"?"Lançou entrada":"Lançou saída",`${p.nome} · ${q} ${p.un} · ${mMot.value.trim()||"Sem motivo"} · ${tipo==='saida'?setor+' · '+(classe==='desvio'?'Desvio':'Consumo'):''} · Data: ${mData.value}`);
  mMot.value="";
  save();
 }
@@ -966,6 +980,12 @@ function renderInventario(){
    const d=document.getElementById('diff_'+el.dataset.prodId);
    if(d)d.textContent=el.value===''?'—':`${Number(el.value)-Number(p?.estoque||0)}`;
  }));
+ const selCat=document.getElementById('inventarioCategoriaImpressao');
+ if(selCat){
+   const atual=selCat.value||'__todas__';
+   selCat.innerHTML='<option value="__todas__">Todas as categorias</option>'+grupos.map(g=>`<option value="${esc(g.cat)}">${esc(g.cat)} (${g.items.length})</option>`).join('');
+   selCat.value=[...selCat.options].some(o=>o.value===atual)?atual:'__todas__';
+ }
  const resumo=document.getElementById('inventarioResumo');if(resumo)resumo.textContent=`${lista.length} produto(s) · ${totalCategorias} categoria(s) · informe apenas os itens contados`;
  const hist=Array.isArray(db.inventarios)?db.inventarios.slice().sort((a,b)=>String(b.dataHora).localeCompare(String(a.dataHora))):[];const hc=document.getElementById('inventarioHistoricoCount');if(hc)hc.textContent=`${hist.length} registro(s)`;const hb=document.getElementById('inventarioHistorico');if(hb)hb.innerHTML=hist.length?`<div class="product-table-wrap"><table><tr><th>Data</th><th>Categoria</th><th>Produto</th><th>Sistema</th><th>Físico</th><th>Diferença</th><th>Usuário</th>${isAdmin()?'<th>Ações</th>':''}</tr>${hist.slice(0,100).map(x=>`<tr><td>${esc(x.data)}</td><td>${esc(x.categoria||'Sem categoria')}</td><td>${esc(x.prod)}</td><td>${x.sistema}</td><td>${x.fisico}</td><td><strong>${x.diferenca>0?'+':''}${x.diferenca}</strong></td><td>${esc(x.usuario||'')}</td>${isAdmin()?`<td><button class="inventory-delete-btn" type="button" onclick="apagarInventario('${x.id}')" title="Excluir inventário" aria-label="Excluir inventário"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M19 6l-1 15H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/></svg><span>Excluir</span></button></td>`:''}</tr>`).join('')}</table></div>`:'<div class="empty-products">Nenhum inventário registrado.</div>';
 }
@@ -1007,6 +1027,208 @@ function aplicarInventario(){
  registrarAuditoria('Inventário','Aplicou inventário',`${conferencias.length} produto(s) conferido(s) · ${alterados} ajuste(s) realizado(s) · Data: ${data}`);
  save();
  alert(`Inventário aplicado. ${alterados} ajuste(s) realizado(s).`);
+}
+function formatQuantidade(v){
+  const n=Number(v)||0;
+  return Number.isInteger(n)?String(n):n.toLocaleString('pt-BR',{maximumFractionDigits:2});
+}
+
+function movimentoEhDesvio(m){
+ const cls=String(m.classificacao||'').toLowerCase();
+ if(cls==='desvio') return true;
+ const motivo=String(m.motivo||'').toLowerCase();
+ return m.tipo==='saida' && /(perda|desvio|quebra|avaria|vencid|extravio)/i.test(motivo);
+}
+
+function setorMovimento(m){ return String(m.setor||'Sem setor').trim() || 'Sem setor'; }
+
+function cmvPeriodoDados(mes){
+ const inicio=`${mes}-01`;
+ const [y,m]=String(mes).split('-').map(Number);
+ const fimDate=new Date(y,m,0); // último dia do mês
+ const fim=`${y}-${String(m).padStart(2,'0')}-${String(fimDate.getDate()).padStart(2,'0')}`;
+ const movs=Array.isArray(db.mov)?db.mov:[];
+ const produtos=Array.isArray(db.produtos)?db.produtos:[];
+ const porProduto={};
+ produtos.forEach(p=>{
+   porProduto[p.id]={p,inicio:null,entradas:0,saidas:0,fim:null};
+ });
+ // Reconstrói os saldos do período a partir do estoque atual e das movimentações.
+ // Isso permite analisar meses anteriores sem criar valores financeiros.
+ produtos.forEach(p=>{
+   const arr=movs.filter(x=>String(x.prodId)===String(p.id));
+   const depoisFim=arr.filter(x=>String(x.data||'')>fim);
+   const saldoFim=Number(p.estoque||0)-depoisFim.reduce((s,x)=>s+(x.tipo==='entrada'?1:-1)*Number(x.qtd||0),0);
+   const noMes=arr.filter(x=>String(x.data||'').slice(0,7)===mes);
+   const entradas=noMes.filter(x=>x.tipo==='entrada').reduce((s,x)=>s+Number(x.qtd||0),0);
+   const saidas=noMes.filter(x=>x.tipo==='saida' && String(x.origem||'').toLowerCase()!=='emprestimo' && String(x.tipoMovimento||'').toLowerCase()!=='emprestimo').reduce((s,x)=>s+Number(x.qtd||0),0);
+   porProduto[p.id]={p,inicio:saldoFim-entradas+saidas,entradas,saidas,fim:saldoFim};
+ });
+ return {porProduto};
+}
+
+function renderAnaliseCMV(){
+ const mesEl=document.getElementById('cmvMes');
+ if(!mesEl)return;
+ if(!mesEl.value)mesEl.value=mesAtualISO();
+ const mes=mesEl.value||mesAtualISO();
+ const {porProduto}=cmvPeriodoDados(mes);
+ const itens=Object.values(porProduto);
+ const totalInicio=itens.reduce((s,x)=>s+Number(x.inicio||0),0);
+ const totalEntradas=itens.reduce((s,x)=>s+Number(x.entradas||0),0);
+ const totalFim=itens.reduce((s,x)=>s+Number(x.fim||0),0);
+ const movsMes=(Array.isArray(db.mov)?db.mov:[]).filter(m=>String(m.data||'').slice(0,7)===mes);
+ const saidas=movsMes.filter(m=>m.tipo==='saida');
+ // Ajustes gerados automaticamente pelo inventário não são saídas operacionais.
+ const saidasRegistradas=saidas.filter(m=>String(m.origem||'')!=='inventario');
+ const saidaTotal=saidasRegistradas.reduce((s,m)=>s+Number(m.qtd||0),0);
+ const desvios=saidasRegistradas.filter(movimentoEhDesvio);
+ const desvioTotal=desvios.reduce((s,m)=>s+Number(m.qtd||0),0);
+ const consumoOperacional=Math.max(0,saidaTotal-desvioTotal);
+ const consumoApurado=Math.max(0,totalInicio+totalEntradas-totalFim);
+ const diferencaEstoque=consumoApurado-saidaTotal;
+ const ajustesInventario=saidas.filter(m=>String(m.origem||'')==='inventario').reduce((s,m)=>s+Number(m.qtd||0),0);
+ const disponivel=totalInicio+totalEntradas;
+ const cmvPct=disponivel>0?(consumoApurado/disponivel)*100:0;
+ const desvioPct=disponivel>0?(desvioTotal/disponivel)*100:0;
+ const cards=document.getElementById('cmvCards');
+ if(cards)cards.innerHTML=`
+ <div class="card cmv-stat-card"><span>Estoque inicial</span><div class="stat">${formatQuantidade(totalInicio)}</div><small>Quantidade no início do período</small></div>
+ <div class="card cmv-stat-card"><span>Entradas / compras</span><div class="stat">${formatQuantidade(totalEntradas)}</div><small>Entradas de produtos cadastrados</small></div>
+ <div class="card cmv-stat-card"><span>Saídas registradas</span><div class="stat">${formatQuantidade(saidaTotal)}</div><small>Saídas operacionais do período</small></div>
+ <div class="card cmv-stat-card"><span>Consumo apurado</span><div class="stat">${formatQuantidade(consumoApurado)}</div><small>Inicial + entradas − final</small></div>
+ <div class="card cmv-stat-card"><span>Desvios registrados</span><div class="stat">${formatQuantidade(desvioTotal)}</div><small>${desvioPct.toFixed(1).replace('.',',')}% do disponível</small></div>
+ <div class="card cmv-stat-card"><span>Diferença de estoque</span><div class="stat">${formatQuantidade(diferencaEstoque)}</div><small>${diferencaEstoque>=0?'Consumo não explicado pelas saídas':'Saídas acima do consumo apurado'}</small></div>
+ <div class="card cmv-stat-card"><span>Estoque final</span><div class="stat">${formatQuantidade(totalFim)}</div><small>Saldo ao final do período</small></div>
+ <div class="card cmv-stat-card cmv-percent-card"><span>CMV físico</span><div class="stat">${cmvPct.toFixed(1).replace('.',',')}%</div><small>Consumo apurado ÷ disponível</small></div>`;
+
+ const porCat={};
+ itens.forEach(x=>{const cat=String(x.p.categoria||'Sem categoria').trim()||'Sem categoria';if(!porCat[cat])porCat[cat]={cat,inicio:0,entradas:0,saidas:0,consumo:0,desvio:0,fim:0,diferenca:0};porCat[cat].inicio+=Number(x.inicio||0);porCat[cat].entradas+=Number(x.entradas||0);porCat[cat].fim+=Number(x.fim||0);});
+ // Saídas e desvios por categoria
+ saidasRegistradas.forEach(m=>{
+   const p=itens.find(x=>String(x.p.id)===String(m.prodId));
+   const cat=String(p?.p?.categoria||'Sem categoria').trim()||'Sem categoria';
+   if(!porCat[cat])porCat[cat]={cat,inicio:0,entradas:0,saidas:0,consumo:0,desvio:0,fim:0,diferenca:0};
+   const qtd=Number(m.qtd||0);
+   porCat[cat].saidas+=qtd;
+   if(movimentoEhDesvio(m))porCat[cat].desvio+=qtd;
+   else porCat[cat].consumo+=qtd;
+ });
+ const cats=Object.values(porCat).sort((a,b)=>a.cat.localeCompare(b.cat,'pt-BR'));
+ const tabela=document.getElementById('cmvCategoriaTabela');
+ if(tabela)tabela.innerHTML=cats.length?`<div class="product-table-wrap"><table><thead><tr><th>Categoria</th><th>Inicial</th><th>Entradas</th><th>Saídas</th><th>Consumo apurado</th><th>Desvio</th><th>Final</th><th>Diferença</th><th>CMV %</th></tr></thead><tbody>${cats.map(c=>{const disp=c.inicio+c.entradas;const pct=disp>0?(c.consumo/disp)*100:0;const consumoCat=Math.max(0,c.inicio+c.entradas-c.fim);const dif=consumoCat-c.saidas;return `<tr><td><strong>${esc(c.cat)}</strong></td><td>${formatQuantidade(c.inicio)}</td><td>${formatQuantidade(c.entradas)}</td><td>${formatQuantidade(c.saidas)}</td><td><strong>${formatQuantidade(consumoCat)}</strong></td><td><strong>${formatQuantidade(c.desvio)}</strong></td><td>${formatQuantidade(c.fim)}</td><td><strong>${formatQuantidade(dif)}</strong></td><td>${pct.toFixed(1).replace('.',',')}%</td></tr>`;}).join('')}</tbody><tfoot><tr><th>Total</th><th>${formatQuantidade(totalInicio)}</th><th>${formatQuantidade(totalEntradas)}</th><th>${formatQuantidade(saidaTotal)}</th><th>${formatQuantidade(consumoApurado)}</th><th>${formatQuantidade(desvioTotal)}</th><th>${formatQuantidade(totalFim)}</th><th>${formatQuantidade(diferencaEstoque)}</th><th>${cmvPct.toFixed(1).replace('.',',')}%</th></tr></table></div>`:'<div class="report-empty">Nenhum produto cadastrado para analisar.</div>';
+
+ const porSetor={Bar:0,Cozinha:0};
+ desvios.forEach(m=>{const setor=setorMovimento(m);porSetor[setor]=(porSetor[setor]||0)+Number(m.qtd||0);});
+ const setores=Object.entries(porSetor).filter(([k,v])=>v>0);
+ const desvioBox=document.getElementById('cmvDesvios');
+ if(desvioBox)desvioBox.innerHTML=`<div class="cmv-special-grid"><div class="cmv-special-item"><span><span class="cmv-inline-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 3 2.8 20h18.4L12 3Z"/><path d="M12 9v5"/><path d="M12 17h.01"/></svg></span>Desvio total</span><strong>${formatQuantidade(desvioTotal)}</strong><small>${desvioPct.toFixed(1).replace('.',',')}% do estoque disponível</small></div><div class="cmv-special-item"><span><span class="cmv-inline-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="m12 3 8 4.5v9L12 21l-8-4.5v-9L12 3Z"/><path d="m4 7.5 8 4.5 8-4.5"/><path d="M12 12v9"/></svg></span>Saídas registradas</span><strong>${formatQuantidade(saidaTotal)}</strong><small>Saídas operacionais do período</small></div><div class="cmv-special-item"><span><span class="cmv-inline-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 20V9"/><path d="M9 20v-6"/><path d="M14 20V6"/><path d="M19 20v-9"/><path d="M3 20h18"/></svg></span>Consumo apurado</span><strong>${formatQuantidade(consumoApurado)}</strong><small>Inicial + entradas − final</small></div><div class="cmv-special-item ${diferencaEstoque===0?'cmv-diff-ok':'cmv-diff-alert'}"><span><span class="cmv-inline-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 7h16v13H4z"/><path d="M8 7V5h8v2"/><path d="M8 12h8M8 16h5"/></svg></span>Diferença de estoque</span><strong>${formatQuantidade(diferencaEstoque)}</strong><small>${diferencaEstoque===0?'Sem diferença entre estoque e saídas':'Diferença entre consumo apurado e saídas registradas'}</small></div></div>${ajustesInventario>0?`<div class="cmv-note">${formatQuantidade(ajustesInventario)} unidade(s) em ajustes automáticos de inventário foram desconsideradas das saídas operacionais.</div>`:''}`;
+ const setorBox=document.getElementById('cmvDesviosSetor');
+ if(setorBox) setorBox.innerHTML=setores.length?`<div class="product-table-wrap"><table><thead><tr><th>Setor</th><th>Desvio</th><th>% do desvio total</th></tr></thead><tbody>${setores.map(([setor,q])=>`<tr><td><strong>${esc(setor)}</strong></td><td>${formatQuantidade(q)}</td><td>${desvioTotal>0?(q/desvioTotal*100).toFixed(1).replace('.',','): '0,0'}%</td></tr>`).join('')}</tbody><tfoot><tr><th>Total</th><th>${formatQuantidade(desvioTotal)}</th><th>100%</th></tr></tfoot></table></div>`:'<div class="report-empty">Nenhum desvio registrado no período.</div>';
+
+ const compras=(db.comprasEspeciais||[]).filter(x=>String(x.data||'').slice(0,7)===mes);
+ const suco=compras.filter(x=>x.tipo==='suco').reduce((s,x)=>s+Number(x.qtd||0),0);
+ const gelo=compras.filter(x=>x.tipo==='gelo').reduce((s,x)=>s+Number(x.qtd||0),0);
+ const especiais=document.getElementById('cmvEspeciais');
+ if(especiais)especiais.innerHTML=`<div class="cmv-special-grid"><div class="cmv-special-item"><span><span class="cmv-inline-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="11" cy="13" r="6"/><path d="M11 7c.2-2 1.5-3.2 3.5-3.5"/><path d="M11 7c-1.4-1.3-3.2-1.4-4.5-.4"/><path d="M8.5 11h.01M13.5 15h.01M13 11h.01M9 15h.01"/></svg></span>Suco de laranja</span><strong>${formatQuantidade(suco)}</strong><small>galões de 5 litros comprados</small></div><div class="cmv-special-item"><span><span class="cmv-inline-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="m12 3 7 4v10l-7 4-7-4V7l7-4Z"/><path d="m5 7 7 4 7-4"/><path d="M12 11v10"/></svg></span>Gelo</span><strong>${formatQuantidade(gelo)}</strong><small>pacotes comprados</small></div></div>`;
+}
+
+function imprimirInventario(){
+  const catDe=p=>String(p.categoria||'Sem categoria').trim()||'Sem categoria';
+  const produtos=Array.isArray(db.produtos)?db.produtos:[];
+  const escolha=document.getElementById('inventarioCategoriaImpressao')?.value||'__todas__';
+  let categorias=[...new Set(produtos.map(catDe))].sort((x,y)=>x.localeCompare(y,'pt-BR'));
+  if(escolha!=='__todas__')categorias=categorias.filter(c=>c===escolha);
+  if(!categorias.length){alert('Não há produtos nesta categoria para imprimir.');return;}
+
+  const pad=n=>String(n).padStart(2,'0');
+  const agora=new Date();
+  const emitidoData=`${pad(agora.getDate())}/${pad(agora.getMonth()+1)}/${agora.getFullYear()}`;
+  const emitidoHora=`${pad(agora.getHours())}:${pad(agora.getMinutes())}`;
+  const emitido=`${emitidoData} às ${emitidoHora}`;
+  const dataISO=document.getElementById('inventarioData')?.value||hojeISO();
+  const dataBR=dataISO.split('-').reverse().join('/');
+  const emitidoPor=usuarioAtualNome();
+  const totalFolhas=categorias.length;
+
+  const paginas=categorias.map((cat,idx)=>{
+    const itens=produtos.filter(p=>catDe(p)===cat)
+      .sort((x,y)=>String(x.nome||'').localeCompare(String(y.nome||''),'pt-BR',{numeric:true}));
+    const linhas=itens.map(p=>{
+      const campo=document.getElementById('inv_'+p.id);
+      const valor=campo?campo.value:'';
+      const sistema=Number(p.estoque||0);
+      const dif=valor===''?'':String(Number(valor)-sistema);
+      return `<tr><td class="inv-c-count">${valor===''?'':esc(valor)}</td><td class="inv-c-prod"><strong>${esc(p.nome)}</strong>${p.cod?`<small>${esc(p.cod)}</small>`:''}</td><td class="inv-c-center">${esc(p.un||'')}</td><td class="inv-c-center">${sistema}</td><td class="inv-c-center inv-c-diff">${esc(dif)}</td></tr>`;
+    }).join('');
+    return `<div class="inv-page" data-nivel="0">
+      <div class="inv-head">
+        <div class="inv-top"><span class="inv-brand">O ESTOQUISTA</span><span class="inv-doc">Inventário de estoque</span></div>
+        <div class="inv-cat">${esc(cat)}</div>
+        <div class="inv-meta">
+          <div><span>Data do inventário</span><b>${esc(dataBR)}</b></div>
+          <div><span>Emitido em</span><b>${esc(emitido)}</b></div>
+          <div><span>Emitido por</span><b>${esc(emitidoPor)}</b></div>
+          <div><span>Itens · Folha</span><b>${itens.length} · ${idx+1}/${totalFolhas}</b></div>
+        </div>
+      </div>
+      <div class="inv-body">
+        <table class="inv-table">
+          <thead><tr><th class="inv-c-count">Contagem física</th><th class="inv-c-prod">Produto</th><th>Unid.</th><th>Sistema</th><th>Diferença</th></tr></thead>
+          <tbody>${linhas}</tbody>
+        </table>
+      </div>
+      <div class="inv-foot">
+        <div class="inv-sign">
+          <div><i></i><span>Nome legível do responsável</span></div>
+          <div><i></i><span>Assinatura do responsável pelo inventário</span></div>
+          <div class="inv-sign-date"><i></i><span>Data</span></div>
+        </div>
+        <div class="inv-stamp"><span>Documento gerado por O Estoquista em ${esc(emitido)}</span><span>Folha ${idx+1} de ${totalFolhas}</span></div>
+      </div>
+    </div>`;
+  }).join('');
+
+  // limpa qualquer impressão anterior
+  document.getElementById('invPrintDoc')?.remove();
+  document.getElementById('invPrintPageStyle')?.remove();
+
+  const doc=document.createElement('div');
+  doc.id='invPrintDoc';
+  doc.innerHTML=paginas;
+  doc.classList.add('measuring');
+  document.body.appendChild(doc);
+
+  // Ajusta o tamanho das linhas para que TODOS os itens da categoria caibam em uma folha.
+  doc.querySelectorAll('.inv-page').forEach(pg=>{
+    const corpo=pg.querySelector('.inv-body');
+    const estoura=()=>corpo.scrollHeight>corpo.clientHeight+1;
+    let nivel=0;
+    while(estoura()&&nivel<7){nivel++;pg.dataset.nivel=String(nivel);}
+    if(estoura())pg.classList.add('inv-flow'); // categoria gigante: segue para a folha seguinte
+  });
+  doc.classList.remove('measuring');
+
+  const estiloPagina=document.createElement('style');
+  estiloPagina.id='invPrintPageStyle';
+  estiloPagina.textContent='@page{size:A4 portrait;margin:10mm}';
+  document.head.appendChild(estiloPagina);
+
+  const tituloOriginal=document.title;
+  document.title=`Inventário - ${escolha==='__todas__'?'Todas as categorias':escolha} - ${dataBR}`;
+  document.body.classList.add('imprimindo-inv');
+
+  let limpo=false;
+  const limpar=()=>{
+    if(limpo)return;limpo=true;
+    document.body.classList.remove('imprimindo-inv');
+    doc.remove();estiloPagina.remove();
+    document.title=tituloOriginal;
+    window.removeEventListener('afterprint',limpar);
+  };
+  window.addEventListener('afterprint',limpar);
+  window.setTimeout(limpar,300000);
+  window.setTimeout(()=>window.print(),150);
 }
 function sugestoesCompra(){return db.produtos.map(p=>{const ideal=Number(p.ideal||Math.max(Number(p.min)||0,(Number(p.min)||0)*2));const falta=Math.max(0,ideal-(Number(p.estoque)||0));return {...p,ideal,sugerida:falta};}).filter(p=>p.sugerida>0).sort((a,b)=>b.sugerida-a.sugerida);}
 function renderRelatorios(){
