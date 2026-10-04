@@ -18,24 +18,45 @@
 </head>
 <body>
 <div id="loginScreen" class="login-screen">
-  <div class="login-card">
-    <div class="login-logo">📦</div>
-    <h1>O Estoquista</h1>
-    <p class="subtitle">Acesse sua conta para continuar</p>
-    <div id="loginError" class="login-error">Usuário ou senha inválidos.</div>
+  <div class="lg-card">
+    <div class="lg-logo" aria-hidden="true">
+      <svg viewBox="0 0 24 24"><path d="M4 7.5 12 4l8 3.5v9L12 20l-8-3.5z"/><path d="M4 7.5 12 11l8-3.5M12 11v9"/></svg>
+    </div>
+    <h1 class="lg-title">O <span>ESTOQUISTA</span></h1>
+    <p class="lg-sub">Acesso online &bull; Controle de estoque e requisições</p>
+    <div id="loginError" class="login-error" role="alert"></div>
     <form id="loginForm" onsubmit="event.preventDefault();login();">
-      <div class="login-field">
-        <label for="loginUser">Usuário</label>
-        <input id="loginUser" type="text" autocomplete="username" placeholder="Digite seu usuário" required>
+      <label class="lg-label" for="loginUser">USUÁRIO OU E-MAIL</label>
+      <div class="lg-field">
+        <svg class="lg-ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 3.6-7 8-7s8 3 8 7"/></svg>
+        <input class="lg-input" id="loginUser" type="text" autocomplete="username" autocapitalize="none" spellcheck="false" placeholder="usuario ou usuario@exemplo.com" required>
       </div>
-      <div class="login-field">
-        <label for="loginPass">Senha</label>
-        <input id="loginPass" type="password" autocomplete="current-password" placeholder="Digite sua senha" required>
+      <label class="lg-label" for="loginPass">SENHA</label>
+      <div class="lg-field">
+        <svg class="lg-ico" viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>
+        <input class="lg-input" id="loginPass" type="password" autocomplete="current-password" placeholder="Senha" required>
+        <button class="lg-eye" id="loginEye" type="button" aria-label="Mostrar senha" aria-pressed="false" onclick="toggleLoginPass()">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>
+        </button>
       </div>
-      <button class="login-btn" type="submit">Entrar</button>
+      <button class="lg-btn" type="submit">Entrar <span aria-hidden="true">&rarr;</span></button>
     </form>
+    <div class="lg-info">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M12 11v6M12 7.5v.01"/></svg>
+      <span>Caso ainda não tenha um login, entre em contato com o Administrador.</span>
+    </div>
   </div>
+  <div class="lg-footer">João Azevedo &bull; 2026</div>
 </div>
+<script>
+function toggleLoginPass(){
+  var i=document.getElementById("loginPass"),b=document.getElementById("loginEye");
+  var show=i.type==="password";
+  i.type=show?"text":"password";
+  b.setAttribute("aria-pressed",show?"true":"false");
+  b.setAttribute("aria-label",show?"Ocultar senha":"Mostrar senha");
+}
+</script>
 
 <header aria-label="O Estoquista"><div class="brand"><span class="brand-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 7.5 12 4l8 3.5v9L12 20l-8-3.5z"/><path d="M4 7.5 12 11l8-3.5M12 11v9"/></svg></span><span>O Estoquista</span></div><small>Controle de estoque,<br>requisições, entradas e saídas</small></header>
 <nav id="nav">
