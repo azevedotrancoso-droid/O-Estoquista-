@@ -71,10 +71,32 @@ async function syncCloudAfterLogin(authUser){
 
   // Primeiro valida o usuário autenticado e carrega o perfil.
   // A leitura de estoquista_state é complementar e não pode impedir o login.
-  const {data:profile,error:profileError}=await supabaseClient.from("profiles")
-    .select("id,nome,login,email,perfil,ativo").eq("id",authUser.id).single();
-  if(profileError)throw profileError;
-  if(!profile)throw new Error("Perfil não encontrado.");
+  let profile=null;
+  let profileError=null;
+  const byId=await supabaseClient.from("profiles")
+    .select("id,nome,login,email,perfil,ativo").eq("id",authUser.id).maybeSingle();
+  profile=byId.data||null;
+  profileError=byId.error||null;
+
+  // Fallback por e-mail para instalações antigas/ambientes em que a leitura por UUID
+  // pode sofrer uma política RLS diferente. O usuário já foi autenticado pelo Auth.
+  if(!profile && authUser.email){
+    const byEmail=await supabaseClient.from("profiles")
+      .select("id,nome,login,email,perfil,ativo").eq("email",authUser.email).maybeSingle();
+    if(byEmail.data) { profile=byEmail.data; profileError=null; }
+    else if(byEmail.error) profileError=byEmail.error;
+  }
+
+  // Último fallback: perfil já sincronizado no cache local. Isso permite recuperar
+  // a sessão mesmo se a tabela profiles estiver temporariamente indisponível.
+  if(!profile && Array.isArray(db?.users)){
+    profile=db.users.find(u=>String(u.id)===String(authUser.id))||
+      db.users.find(u=>String(u.email||"").toLowerCase()===String(authUser.email||"").toLowerCase())||null;
+    if(profile) profileError=null;
+  }
+
+  if(profileError && !profile)throw profileError;
+  if(!profile)throw new Error("Perfil não encontrado para este usuário no banco de dados.");
   if(profile.ativo===false)throw new Error("Usuário inativo.");
 
   const cleanProfile={
@@ -197,7 +219,15 @@ async function login(){
   }catch(e){
     console.error("Falha no login online:",e);
     if(err){
-      err.textContent="Usuário ou senha inválidos, ou não foi possível conectar ao servidor.";
+      const msg=String(e?.message||"");
+      if(/invalid login credentials|invalid credentials/i.test(msg))
+        err.textContent="Usuário ou senha inválidos.";
+      else if(/perfil não encontrado/i.test(msg))
+        err.textContent="Login autenticado, mas este usuário ainda não possui um perfil cadastrado no sistema.";
+      else if(/permission|row-level security|rls|not authorized/i.test(msg))
+        err.textContent="Login autenticado, mas o Supabase bloqueou o acesso ao perfil. Verifique as permissões da tabela profiles.";
+      else
+        err.textContent="Não foi possível concluir o login. Tente novamente.";
       err.style.display="block";
     }
     document.getElementById("loginPass").value="";
