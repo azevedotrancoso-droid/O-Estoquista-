@@ -1513,3 +1513,50 @@ nav#nav button.active .nav-icon{color:#fff}
 .greeting-card .greeting-icon{font-size:34px;line-height:1;flex:0 0 auto}
 @media(max-width:700px){.greeting-card{padding:14px 16px}.greeting-card strong{font-size:18px}.greeting-card .greeting-icon{font-size:28px}}
 @media print{.greeting-card{display:none!important}}
+
+/* ===== Barras de exportação ===== */
+.export-bar{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin:0 0 14px}
+.export-bar>span{font-size:12px;font-weight:700;color:#5b6a80;text-transform:uppercase;letter-spacing:.04em}
+.export-bar button{min-height:38px;padding:0 14px;font-size:13px;width:auto}
+.export-list{display:grid;gap:8px;margin:12px 0 14px}
+.export-row{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:10px;padding:10px 12px;border:1px solid #dbe3ee;border-radius:12px;background:#fff}
+.export-row strong{font-size:14px}
+.export-row .export-btns{display:flex;gap:8px}
+.export-row .export-btns button{min-height:36px;padding:0 12px;font-size:13px;width:auto}
+
+/* ===== Relatório em PDF (impressão) ===== */
+#relPrintDoc{display:none}
+#relPrintDoc,#relPrintDoc *{box-sizing:border-box}
+#relPrintDoc{font-family:Arial,Helvetica,sans-serif;color:#1b2536;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+#relPrintDoc .rel-top{display:flex;justify-content:space-between;align-items:center;padding:3mm 5mm;background:#0a2748;color:#fff;border-radius:2mm 2mm 0 0}
+#relPrintDoc .rel-brand{font-size:13pt;font-weight:800;letter-spacing:.06em}
+#relPrintDoc .rel-doc{font-size:10pt;font-weight:600;letter-spacing:.04em}
+#relPrintDoc .rel-title{margin:4mm 0 3mm;font-size:18pt;line-height:1.15;font-weight:800;color:#0a2748}
+#relPrintDoc .rel-meta{display:flex;flex-wrap:wrap;border:.3mm solid #b8c4d4;border-radius:1.5mm;margin-bottom:4mm}
+#relPrintDoc .rel-meta div{flex:1 1 40mm;padding:2mm 3mm;border-right:.3mm solid #b8c4d4}
+#relPrintDoc .rel-meta div:last-child{border-right:0}
+#relPrintDoc .rel-meta span{display:block;font-size:7pt;color:#5b6a80;margin-bottom:.8mm}
+#relPrintDoc .rel-meta b{display:block;font-size:9.5pt;overflow-wrap:anywhere}
+#relPrintDoc .rel-pills{display:flex;flex-wrap:wrap;gap:3mm;margin-bottom:4mm}
+#relPrintDoc .rel-pill{flex:1 1 38mm;padding:2.5mm 3mm;border:.3mm solid #cfdbea;border-radius:1.5mm;background:#eef3f9;break-inside:avoid}
+#relPrintDoc .rel-pill span{display:block;font-size:7.5pt;color:#5b6a80}
+#relPrintDoc .rel-pill b{display:block;font-size:13pt;color:#0a2748;margin-top:.5mm}
+#relPrintDoc .rel-sec{margin:5mm 0 2mm;padding-bottom:1mm;border-bottom:.5mm solid #0a2748;font-size:12pt;font-weight:800;color:#0a2748;break-after:avoid;page-break-after:avoid}
+#relPrintDoc .rel-table{width:100%;border-collapse:collapse;border:0;border-radius:0;box-shadow:none;background:transparent;overflow:visible;font-size:8.5pt}
+#relPrintDoc .rel-table th{padding:1.8mm 2mm;background:#e8eef6;color:#0a2748;font-size:7.5pt;font-weight:800;text-transform:uppercase;letter-spacing:.03em;border:.3mm solid #8fa0b6}
+#relPrintDoc .rel-table td{padding:1.4mm 2mm;border:.3mm solid #aab6c6;vertical-align:top;font-size:8.5pt;line-height:1.25;overflow-wrap:anywhere}
+#relPrintDoc .rel-table tbody tr:nth-child(even) td{background:#f5f8fb}
+#relPrintDoc .rel-table thead{display:table-header-group}
+#relPrintDoc .rel-table tr{break-inside:avoid;page-break-inside:avoid}
+#relPrintDoc .rel-l{text-align:left}
+#relPrintDoc .rel-r{text-align:right}
+#relPrintDoc .rel-c{text-align:center}
+#relPrintDoc .rel-vazio{padding:4mm;border:.3mm dashed #b8c4d4;color:#6b7a90;font-size:9pt;text-align:center}
+#relPrintDoc .rel-foot{position:fixed;left:0;right:0;bottom:0;padding-top:1.5mm;border-top:.3mm solid #b8c4d4;font-size:7.5pt;color:#6b7a90}
+@media print{
+  body.imprimindo-rel>*:not(#relPrintDoc){display:none!important}
+  body.imprimindo-rel>#relPrintDoc{display:block!important;position:static!important;width:auto!important}
+  body.imprimindo-rel #relPrintDoc,body.imprimindo-rel #relPrintDoc *{visibility:visible!important}
+  body.imprimindo-rel,body.imprimindo-rel html{background:#fff!important;height:auto!important}
+  .export-bar{display:none!important}
+}

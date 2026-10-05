@@ -5,6 +5,14 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>O Estoquista</title>
 <link rel="stylesheet" href="style.css">
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#0a2748">
+<meta name="application-name" content="O Estoquista">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="O Estoquista">
+<link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
 
 
 
@@ -262,21 +270,22 @@ function toggleLoginPass(){
 </section>
 <section id="relatorios" class="view"><div class="page-head"><div><h2>📊 Relatórios</h2><div class="muted">Visão gerencial do estoque, consumo, requisições e compras.</div></div><div class="report-tools"><label>Mês de referência</label><input id="relatorioMes" type="month" onchange="renderRelatorios()"></div></div>
 <div id="relatorioCards" class="grid report-cards"></div>
-<div class="card"><div class="report-section-head"><div><h3>🛒 Sugestão de compras</h3><span class="muted">Calculada com base no estoque ideal cadastrado para cada produto.</span></div><button class="secondary" type="button" onclick="exportSugestaoCompras()">📥 Exportar</button></div><div id="sugestaoComprasTable"></div></div>
+<div class="card"><div class="report-section-head"><div><h3>🛒 Sugestão de compras</h3><span class="muted">Calculada com base no estoque ideal cadastrado para cada produto.</span></div></div><div id="sugestaoComprasTable"></div></div>
 <div class="card"><div class="report-section-head"><div><h3>📦 Estoque</h3><span class="muted">Produtos, situação e valor estimado quando houver custo cadastrado.</span></div></div><div id="relatorioEstoque"></div></div>
-<div class="card"><div class="report-section-head"><div><h3>🔄 Movimentações do mês</h3></div><button class="secondary" type="button" onclick="exportRelatorioMes()">📊 Exportar relatório</button></div><div id="relatorioMovimentos"></div></div>
+<div class="card"><div class="report-section-head"><div><h3>🔄 Movimentações do mês</h3></div></div><div id="relatorioMovimentos"></div></div>
 <div class="card"><div class="report-section-head"><div><h3>📋 Requisições do mês</h3></div></div><div id="relatorioRequisicoes"></div></div>
 <div class="card"><div class="report-section-head"><div><h3>🧾 Compras especiais</h3><span class="muted">Suco de laranja e gelo.</span></div></div><div id="relatorioCompras"></div></div></section>
 
 <section id="auditoria" class="view"><div class="page-head"><div><h2>🛡️ Auditoria</h2><div class="muted">Histórico das principais ações realizadas no sistema.</div></div><div class="audit-tools"><input id="auditoriaBusca" placeholder="Buscar ação, usuário ou detalhe..." oninput="renderAuditoria()"><select id="auditoriaTipo" onchange="renderAuditoria()"><option value="">Todos os tipos</option><option>Login</option><option>Produto</option><option>Requisição</option><option>Movimentação</option><option>Compra</option><option>Inventário</option><option>Usuário</option><option>Sistema</option></select></div></div>
-<div class="card"><div class="report-section-head"><div><h3>Registro de atividades</h3><span id="auditoriaCount" class="muted"></span></div><button class="secondary" type="button" onclick="exportAuditoria()">📥 Exportar auditoria</button></div><div id="auditoriaTable"></div></div></section>
+<div class="card"><div class="report-section-head"><div><h3>Registro de atividades</h3><span id="auditoriaCount" class="muted"></span></div></div><div id="auditoriaTable"></div></div></section>
 
 <section id="usuarios" class="view" data-admin-only="1"><h2>Usuários</h2>
 <div class="card"><h3 id="userFormTitle">Cadastrar usuário</h3><div class="grid"><div><label>Nome</label><input id="uNome" autocomplete="name"></div><div><label>Usuário</label><input id="uLogin" autocomplete="username"></div><div><label>E-mail</label><input id="uEmail" type="email" placeholder="usuario@exemplo.com" autocomplete="email"></div><div><label>Senha</label><input id="uSenha" type="password" placeholder="Mínimo de 6 caracteres" autocomplete="new-password"></div><div><label>Perfil</label><select id="uPerfil"><option>Administrador</option><option>Estoquista</option><option>RH</option><option>Bar</option><option>Consulta</option></select></div></div><p class="muted" style="margin:10px 0 0">A conta é criada no Supabase Auth. A senha não é armazenada no banco do Estoquista.</p><div class="actions"><button id="userSaveBtn" type="button" onclick="addUser()">Adicionar usuário</button><button id="userCancelBtn" type="button" class="secondary" onclick="cancelEditUser()" style="display:none">Cancelar edição</button></div></div>
 <div class="card"><div id="userTable"></div></div></section>
 
 <section id="menu" class="view"><h2>Menu</h2>
-<div class="card"><h3>📊 Exportação</h3><p class="muted">Exporte todas as entradas e saídas para uma planilha compatível com Excel.</p><div class="actions"><button class="green" onclick="exportCSV()">📊 Exportar entradas e saídas para Excel</button><button class="secondary" onclick="exportAll()">📁 Exportar dados completos</button></div></div>
+<div class="card"><h3>📊 Central de exportação</h3><p class="muted">Gere relatórios em <strong>PDF</strong> (pronto para imprimir, com data, hora e responsável) ou em planilha <strong>Excel (.xlsx)</strong>. Os filtros aplicados em cada tela são respeitados.</p><div id="menuExportacaoLista" class="export-list"></div><div class="actions"><button class="secondary" onclick="exportAll()">📁 Exportar dados completos</button></div></div>
+<div class="card" id="cardInstalarApp"><h3>📲 Instalar aplicativo</h3><p class="muted" id="instalarTexto"></p><div class="actions"><button class="green" type="button" id="btnInstalarApp" onclick="instalarApp()" style="display:none">📲 Instalar O Estoquista</button></div></div>
 <div class="card"><h3>Dados</h3>
 <button class="danger" onclick="deleteAllMovements()">Apagar todas as entradas e saídas</button>
 <span class="muted" style="display:block;margin-top:8px">🔒 Apenas Administrador pode apagar todas as movimentações, inclusive as vinculadas a requisições.</span><button id="resetDataBtn" class="danger" onclick="resetData()">Apagar todos os dados</button><span id="resetDataLocked" class="muted" style="display:none">🔒 Apenas Administrador pode apagar todos os dados.</span></div>

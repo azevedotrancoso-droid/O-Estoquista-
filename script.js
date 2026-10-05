@@ -506,6 +506,7 @@ function renderSaudacao(){
 function render(){
  applyPermissions();
  renderSaudacao();
+ renderExportacaoMenu();
  document.querySelectorAll("select").forEach(()=>{});
  sProdutos.textContent=db.produtos.length;sReq.textContent=db.req.length;sMov.textContent=db.mov.length;
  const low=db.produtos.filter(p=>p.estoque<=p.min);sBaixo.textContent=low.length;
@@ -528,7 +529,7 @@ function render(){
   renderRelatorios();
   renderAuditoria();
   const userRows=db.users.map(u=>{
-    const actions=u.login==="admin"?'<span class="muted">🔒 Principal</span>':(canDelete()?`<div class="actions"><button class="action-btn" onclick="editUser('${u.id}')">✏️ Editar</button><button class="trash-btn action-btn" onclick="delUser('${u.id}')" title="Excluir usuário" aria-label="Excluir usuário"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M19 6l-1 15H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/></svg>Excluir</button></div>`:`<span class="muted">🔒 Sem permissão</span>`);
+    const actions=u.login==="admin"?(canDelete()?`<div class="actions"><button class="action-btn" onclick="editUser('${u.id}')">✏️ Editar</button><span class="muted">🔒 Principal</span></div>`:'<span class="muted">🔒 Principal</span>'):(canDelete()?`<div class="actions"><button class="action-btn" onclick="editUser('${u.id}')">✏️ Editar</button><button class="trash-btn action-btn" onclick="delUser('${u.id}')" title="Excluir usuário" aria-label="Excluir usuário"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M19 6l-1 15H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/></svg>Excluir</button></div>`:`<span class="muted">🔒 Sem permissão</span>`);
     return `<tr><td>${esc(u.nome)}</td><td>${esc(u.login)}</td><td>${esc(u.email||"—")}</td><td>${esc(u.perfil)}</td><td>${actions}</td></tr>`;
   }).join("");
   userTable.innerHTML=db.users.length?`<div class="product-table-wrap"><table><tr><th>Nome</th><th>Usuário</th><th>E-mail</th><th>Perfil</th><th>Ações</th></tr>${userRows}</table></div>`:"<p class='muted'>Nenhum usuário cadastrado.</p>";
@@ -1007,6 +1008,7 @@ function editUser(i){
  document.getElementById("uEmail").readOnly=true;
  document.getElementById("uSenha").value="";
  document.getElementById("uPerfil").value=u.perfil||"Consulta";
+ document.getElementById("uPerfil").disabled=(String(u.login||"").toLowerCase()==="admin");
  document.getElementById("userFormTitle").textContent="Editar usuário";
  const btn=document.getElementById("userSaveBtn");btn.textContent="Salvar alterações";btn.onclick=function(){saveUserEdit(i)};
  document.getElementById("userCancelBtn").style.display="inline-block";
@@ -1070,6 +1072,7 @@ async function saveUserEdit(i){
 function cancelEditUser(){
  document.getElementById("uNome").value="";document.getElementById("uLogin").value="";document.getElementById("uLogin").readOnly=false;document.getElementById("uEmail").value="";document.getElementById("uEmail").readOnly=false;document.getElementById("uSenha").value="";
  document.getElementById("uPerfil").value="Administrador";
+ document.getElementById("uPerfil").disabled=false;
  document.getElementById("userFormTitle").textContent="Cadastrar usuário";
  const btn=document.getElementById("userSaveBtn");btn.textContent="Adicionar usuário";btn.onclick=addUser;
  document.getElementById("userCancelBtn").style.display="none";
@@ -1557,6 +1560,317 @@ function resetData(){
  db.auditoria.unshift({id:id(),dataHora:new Date().toISOString(),data:hojeISO(),usuario:usuarioAtualNome(),tipo:"Sistema",acao:"Resetou dados",detalhes:"Todos os dados operacionais foram removidos."});
  save();
 }
+/* =========================================================
+   EXPORTAÇÃO (Excel .xlsx e PDF) + APLICATIVO INSTALÁVEL
+   ========================================================= */
+/* ---------- Gerador de .xlsx sem bibliotecas externas ---------- */
+const _crcTab=(()=>{const t=new Uint32Array(256);for(let n=0;n<256;n++){let c=n;for(let k=0;k<8;k++)c=(c&1)?(0xEDB88320^(c>>>1)):(c>>>1);t[n]=c>>>0;}return t;})();
+function _crc32(b){let c=0xFFFFFFFF;for(let i=0;i<b.length;i++)c=_crcTab[(c^b[i])&0xFF]^(c>>>8);return(c^0xFFFFFFFF)>>>0;}
+function _criarZip(arquivos){
+  const enc=new TextEncoder(),partes=[],central=[];let offset=0;
+  const u16=n=>[n&255,(n>>>8)&255],u32=n=>[n&255,(n>>>8)&255,(n>>>16)&255,(n>>>24)&255];
+  arquivos.forEach(a=>{
+    const nome=enc.encode(a.nome),dados=enc.encode(a.conteudo),crc=_crc32(dados);
+    const local=new Uint8Array([0x50,0x4B,3,4,...u16(20),...u16(0x0800),...u16(0),...u16(0),...u16(0x21),...u32(crc),...u32(dados.length),...u32(dados.length),...u16(nome.length),...u16(0)]);
+    partes.push(local,nome,dados);
+    central.push(new Uint8Array([0x50,0x4B,1,2,...u16(20),...u16(20),...u16(0x0800),...u16(0),...u16(0),...u16(0x21),...u32(crc),...u32(dados.length),...u32(dados.length),...u16(nome.length),...u16(0),...u16(0),...u16(0),...u16(0),...u32(0),...u32(offset)]),nome);
+    offset+=local.length+nome.length+dados.length;
+  });
+  const tamCentral=central.reduce((s,p)=>s+p.length,0);
+  const fim=new Uint8Array([0x50,0x4B,5,6,...u16(0),...u16(0),...u16(arquivos.length),...u16(arquivos.length),...u32(tamCentral),...u32(offset),...u16(0)]);
+  const todos=[...partes,...central,fim],total=todos.reduce((s,p)=>s+p.length,0),saida=new Uint8Array(total);
+  let pos=0;todos.forEach(p=>{saida.set(p,pos);pos+=p.length;});
+  return saida;
+}
+function _colLetra(i){let s='';i++;while(i>0){const m=(i-1)%26;s=String.fromCharCode(65+m)+s;i=Math.floor((i-1)/26);}return s;}
+function _xe(t){return String(t??'').replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g,'').replace(/[&<>"]/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[m]));}
+const _ESTILO_TIPO={texto:4,num:5,moeda:6,data:7,pct:8,moeda4:12};
+function _serialData(v){const m=String(v||'').match(/^(\d{4})-(\d{2})-(\d{2})/);return m?Date.UTC(+m[1],+m[2]-1,+m[3])/86400000+25569:null;}
+function _celula(ref,valor,tipo,estilo){
+  const t=tipo||'texto';
+  if(valor===null||valor===undefined||valor==='')return `<c r="${ref}" s="${estilo||_ESTILO_TIPO[t]||4}"/>`;
+  if(t==='data'&&/^\d{4}-\d{2}-\d{2}/.test(String(valor)))return `<c r="${ref}" s="${estilo||7}"><v>${_serialData(valor)}</v></c>`;
+  if(['num','moeda','moeda4','pct'].includes(t)){const n=Number(valor);if(Number.isFinite(n))return `<c r="${ref}" s="${estilo||_ESTILO_TIPO[t]}"><v>${n}</v></c>`;}
+  return `<c r="${ref}" s="${estilo||4}" t="inlineStr"><is><t xml:space="preserve">${_xe(valor)}</t></is></c>`;
+}
+function _planilhaXML(sh){
+  const colunas=sh.colunas||[],linhas=sh.linhas||[],resumo=sh.resumo||[],nCols=Math.max(colunas.length,2);
+  const rows=[];let r=1;
+  const linhaTexto=(txt,estilo)=>`<row r="${r}"><c r="A${r}" s="${estilo}" t="inlineStr"><is><t xml:space="preserve">${_xe(txt)}</t></is></c></row>`;
+  rows.push(linhaTexto(sh.titulo||sh.nome,1));r++;
+  rows.push(linhaTexto(sh.subtitulo||'',2));r++;
+  r++;
+  resumo.forEach(([rot,val,tipo])=>{rows.push(`<row r="${r}">${_celula('A'+r,rot,'texto',9)}${_celula('B'+r,val,tipo||'texto')}</row>`);r++;});
+  if(resumo.length)r++;
+  let hdr=0;
+  if(colunas.length){
+    hdr=r;
+    rows.push(`<row r="${r}" ht="24" customHeight="1">${colunas.map((c,i)=>`<c r="${_colLetra(i)}${r}" s="3" t="inlineStr"><is><t xml:space="preserve">${_xe(c.t)}</t></is></c>`).join('')}</row>`);r++;
+    linhas.forEach(lin=>{rows.push(`<row r="${r}">${colunas.map((c,i)=>_celula(_colLetra(i)+r,lin[i],c.tipo)).join('')}</row>`);r++;});
+  }
+  const ultima=Math.max(r-1,hdr||1);
+  const larg=[];
+  for(let i=0;i<nCols;i++){
+    const c=colunas[i];let w=c&&c.larg?c.larg:0;
+    if(!w){let m=c?String(c.t).length:10;linhas.slice(0,300).forEach(l=>{m=Math.max(m,String(l[i]??'').length);});w=Math.min(60,Math.max(10,m+3));}
+    if(i===0&&resumo.length)w=Math.max(w,26);
+    larg.push(w);
+  }
+  const pane=hdr?`<pane ySplit="${hdr}" topLeftCell="A${hdr+1}" activePane="bottomLeft" state="frozen"/><selection pane="bottomLeft" activeCell="A${hdr+1}" sqref="A${hdr+1}"/>`:'';
+  return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetPr><pageSetUpPr fitToPage="1"/></sheetPr><dimension ref="A1:${_colLetra(nCols-1)}${ultima}"/><sheetViews><sheetView workbookViewId="0" showGridLines="0">${pane}</sheetView></sheetViews><sheetFormatPr defaultRowHeight="15"/><cols>${larg.map((w,i)=>`<col min="${i+1}" max="${i+1}" width="${w}" customWidth="1"/>`).join('')}</cols><sheetData>${rows.join('')}</sheetData>${hdr&&linhas.length?`<autoFilter ref="A${hdr}:${_colLetra(colunas.length-1)}${ultima}"/>`:''}<pageMargins left="0.5" right="0.5" top="0.6" bottom="0.6" header="0.3" footer="0.3"/><pageSetup paperSize="9" orientation="${colunas.length>6?'landscape':'portrait'}" fitToWidth="1" fitToHeight="0"/></worksheet>`;
+}
+const _ESTILOS_XML=`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><numFmts count="5"><numFmt numFmtId="164" formatCode="#,##0.###"/><numFmt numFmtId="165" formatCode="&quot;R$&quot;\\ #,##0.00"/><numFmt numFmtId="166" formatCode="dd/mm/yyyy"/><numFmt numFmtId="167" formatCode="0.00&quot;%&quot;"/><numFmt numFmtId="168" formatCode="&quot;R$&quot;\\ #,##0.0000"/></numFmts><fonts count="5"><font><sz val="11"/><name val="Calibri"/></font><font><b/><sz val="16"/><color rgb="FF0A2748"/><name val="Calibri"/></font><font><i/><sz val="10"/><color rgb="FF6B7A90"/><name val="Calibri"/></font><font><b/><sz val="11"/><color rgb="FFFFFFFF"/><name val="Calibri"/></font><font><b/><sz val="11"/><color rgb="FF0A2748"/><name val="Calibri"/></font></fonts><fills count="4"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill><fill><patternFill patternType="solid"><fgColor rgb="FF0A2748"/><bgColor indexed="64"/></patternFill></fill><fill><patternFill patternType="solid"><fgColor rgb="FFEEF3F9"/><bgColor indexed="64"/></patternFill></fill></fills><borders count="2"><border><left/><right/><top/><bottom/><diagonal/></border><border><left style="thin"><color rgb="FFB8C4D4"/></left><right style="thin"><color rgb="FFB8C4D4"/></right><top style="thin"><color rgb="FFB8C4D4"/></top><bottom style="thin"><color rgb="FFB8C4D4"/></bottom><diagonal/></border></borders><cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs><cellXfs count="13"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/><xf numFmtId="0" fontId="1" fillId="0" borderId="0" xfId="0" applyFont="1"/><xf numFmtId="0" fontId="2" fillId="0" borderId="0" xfId="0" applyFont="1"/><xf numFmtId="0" fontId="3" fillId="2" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="center" wrapText="1"/></xf><xf numFmtId="0" fontId="0" fillId="0" borderId="1" xfId="0" applyBorder="1" applyAlignment="1"><alignment vertical="top" wrapText="1"/></xf><xf numFmtId="164" fontId="0" fillId="0" borderId="1" xfId="0" applyNumberFormat="1" applyBorder="1" applyAlignment="1"><alignment vertical="top"/></xf><xf numFmtId="165" fontId="0" fillId="0" borderId="1" xfId="0" applyNumberFormat="1" applyBorder="1" applyAlignment="1"><alignment vertical="top"/></xf><xf numFmtId="166" fontId="0" fillId="0" borderId="1" xfId="0" applyNumberFormat="1" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="top"/></xf><xf numFmtId="167" fontId="0" fillId="0" borderId="1" xfId="0" applyNumberFormat="1" applyBorder="1" applyAlignment="1"><alignment vertical="top"/></xf><xf numFmtId="0" fontId="4" fillId="3" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1"/><xf numFmtId="0" fontId="4" fillId="0" borderId="1" xfId="0" applyFont="1" applyBorder="1"/><xf numFmtId="0" fontId="4" fillId="0" borderId="0" xfId="0" applyFont="1"/><xf numFmtId="168" fontId="0" fillId="0" borderId="1" xfId="0" applyNumberFormat="1" applyBorder="1" applyAlignment="1"><alignment vertical="top"/></xf></cellXfs><cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>`;
+function _nomeAba(n,usados){
+  let base=String(n||'Planilha').replace(/[\[\]:*?\/\\]/g,' ').replace(/\s+/g,' ').trim().slice(0,31)||'Planilha',nome=base,i=2;
+  while(usados.has(nome.toLowerCase())){const suf=' ('+i+')';nome=base.slice(0,31-suf.length)+suf;i++;}
+  usados.add(nome.toLowerCase());return nome;
+}
+function gerarXLSX(planilhas){
+  const usados=new Set(),abas=planilhas.map(p=>({...p,nome:_nomeAba(p.nome,usados)}));
+  const arquivos=[
+    {nome:'[Content_Types].xml',conteudo:`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>${abas.map((a,i)=>`<Override PartName="/xl/worksheets/sheet${i+1}.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>`).join('')}<Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/></Types>`},
+    {nome:'_rels/.rels',conteudo:`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>`},
+    {nome:'xl/workbook.xml',conteudo:`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><bookViews><workbookView/></bookViews><sheets>${abas.map((a,i)=>`<sheet name="${_xe(a.nome)}" sheetId="${i+1}" r:id="rId${i+1}"/>`).join('')}</sheets></workbook>`},
+    {nome:'xl/_rels/workbook.xml.rels',conteudo:`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">${abas.map((a,i)=>`<Relationship Id="rId${i+1}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet${i+1}.xml"/>`).join('')}<Relationship Id="rId${abas.length+1}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>`},
+    {nome:'xl/styles.xml',conteudo:_ESTILOS_XML},
+    ...abas.map((a,i)=>({nome:`xl/worksheets/sheet${i+1}.xml`,conteudo:_planilhaXML(a)}))
+  ];
+  return new Blob([_criarZip(arquivos)],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
+}
+function _baixarBlob(nome,blob){const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=nome;document.body.appendChild(a);a.click();setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove();},1500);}
+
+/* ---------- Dados dos relatórios ---------- */
+function _agoraTxt(){const d=new Date(),p=n=>String(n).padStart(2,'0');return `${p(d.getDate())}/${p(d.getMonth()+1)}/${d.getFullYear()} às ${p(d.getHours())}:${p(d.getMinutes())}`;}
+function _ordNome(a,b){return String(a.nome||'').localeCompare(String(b.nome||''),'pt-BR',{numeric:true});}
+function _numerico(txt){const t=String(txt||'').trim();return /^-?\d+([.,]\d+)?$/.test(t)?Number(t.replace(',','.')):null;}
+function _secaoDeTabelaDOM(titulo,tabela){
+  const heads=[...tabela.querySelectorAll('thead th')].map(t=>t.textContent.trim());
+  const linhas=[...tabela.querySelectorAll('tbody tr')].map(tr=>[...tr.children].map(td=>td.textContent.trim()));
+  const rodape=[...tabela.querySelectorAll('tfoot tr')].map(tr=>[...tr.children].map(td=>td.textContent.trim()));
+  const todas=[...linhas,...rodape];
+  const colunas=heads.map((t,i)=>{const ehNum=todas.length&&todas.every(l=>l[i]===''||l[i]===undefined||_numerico(l[i])!==null);return {t,tipo:ehNum?'num':'texto'};});
+  const conv=l=>l.map((v,i)=>colunas[i]&&colunas[i].tipo==='num'&&_numerico(v)!==null?_numerico(v):v);
+  return {nome:titulo,titulo,colunas,linhas:[...linhas,...rodape].map(conv)};
+}
+function _secaoDeBlocosDOM(titulo,container){
+  const itens=[...container.querySelectorAll('.cmv-special-item')];
+  if(!itens.length)return null;
+  return {nome:titulo,titulo,colunas:[{t:'Indicador',tipo:'texto'},{t:'Valor',tipo:'num'},{t:'Observação',tipo:'texto'}],
+    linhas:itens.map(it=>[(it.querySelector('span')?.textContent||'').trim(),_numerico(it.querySelector('strong')?.textContent)??(it.querySelector('strong')?.textContent||'').trim(),(it.querySelector('small')?.textContent||'').trim()])};
+}
+function montarRelatorio(tipo){
+  const base={meta:[],resumo:[],secoes:[]};
+  const hoje=hojeISO();
+  switch(tipo){
+    case 'produtos':{
+      const termo=(document.getElementById('buscaProduto')?.value||'').toLowerCase().trim(),filtro=document.getElementById('filtroProduto')?.value||'todos',cat=document.getElementById('filtroCategoriaProduto')?.value||'';
+      const lista=db.produtos.filter(produtoVisivel).filter(p=>{
+        const match=!termo||String(p.nome||'').toLowerCase().includes(termo)||String(p.cod||'').toLowerCase().includes(termo),baixo=p.estoque<=p.min;
+        return match&&(filtro==='todos'||(filtro==='baixo'&&baixo)||(filtro==='normal'&&!baixo))&&(!cat||(p.categoria||'')===cat);
+      }).sort(_ordNome);
+      const baixos=lista.filter(p=>p.estoque<=p.min).length;
+      return {...base,titulo:'Produtos cadastrados',arquivo:'produtos',meta:cat?[['Categoria',cat]]:[],
+        resumo:[['Produtos listados',lista.length,'num'],['Com estoque baixo',baixos,'num'],['Com estoque normal',lista.length-baixos,'num']],
+        secoes:[{nome:'Produtos',titulo:'Produtos',colunas:[{t:'Produto',tipo:'texto',larg:38},{t:'Código',tipo:'texto'},{t:'Categoria',tipo:'texto',larg:20},{t:'Unidade',tipo:'texto'},{t:'Estoque atual',tipo:'num'},{t:'Estoque mínimo',tipo:'num'},{t:'Estoque ideal',tipo:'num'},{t:'Status',tipo:'texto'}],
+          linhas:lista.map(p=>[p.nome,p.cod||'',p.categoria||'Sem categoria',p.un||'',Number(p.estoque)||0,Number(p.min)||0,Number(p.ideal||Math.max(Number(p.min)||0,(Number(p.min)||0)*2)),p.estoque<=p.min?'Estoque baixo':'Normal'])}]};
+    }
+    case 'movimentos':{
+      const filtro=(document.getElementById('filtroMovimento')?.value||'').trim().toLowerCase(),todos=Array.isArray(db.mov)?db.mov:[];
+      const lista=(filtro?todos.filter(m=>String(m.motivo||'').toLowerCase().includes(filtro)):todos).slice().reverse();
+      const ent=lista.filter(m=>m.tipo==='entrada').length;
+      return {...base,titulo:'Entradas e saídas',arquivo:'entradas_saidas',
+        resumo:[['Movimentações',lista.length,'num'],['Entradas',ent,'num'],['Saídas',lista.length-ent,'num']],
+        secoes:[{nome:'Movimentações',titulo:'Movimentações',colunas:[{t:'Data',tipo:'data'},{t:'Produto',tipo:'texto',larg:34},{t:'Tipo',tipo:'texto'},{t:'Quantidade',tipo:'num'},{t:'Unidade',tipo:'texto'},{t:'Setor',tipo:'texto'},{t:'Classificação',tipo:'texto'},{t:'Motivo',tipo:'texto',larg:36}],
+          linhas:lista.map(m=>[m.data,m.prod,m.tipo==='entrada'?'Entrada':'Saída',Number(m.qtd)||0,m.un||'',m.setor||'',m.tipo==='saida'?(m.classificacao==='desvio'?'Desvio':'Consumo'):'',m.motivo||''])}]};
+    }
+    case 'requisicoes':{
+      const lista=db.req.map(normalizeReq).slice().reverse().filter(reqMatches);
+      const itensTxt=r=>r.itens.map(i=>`${i.prod} — ${i.qtd} ${i.un}`).join('; ');
+      const itens=[];lista.forEach(r=>r.itens.forEach(i=>itens.push([r.numero,r.setor,i.prod,Number(i.qtd)||0,Number(i.entregue)||0,i.un])));
+      return {...base,titulo:'Requisições',arquivo:'requisicoes',resumo:[['Requisições listadas',lista.length,'num'],['Itens solicitados',itens.length,'num']],
+        secoes:[{nome:'Requisições',titulo:'Requisições',colunas:[{t:'Número',tipo:'texto'},{t:'Data',tipo:'data'},{t:'Setor',tipo:'texto'},{t:'Solicitante',tipo:'texto',larg:22},{t:'Prioridade',tipo:'texto'},{t:'Status',tipo:'texto'},{t:'Itens',tipo:'texto',larg:50}],
+          linhas:lista.map(r=>[r.numero,r.dataISO||r.data,r.setor,r.sol,r.prioridade,r.status,itensTxt(r)])},
+          {nome:'Itens',titulo:'Itens das requisições',colunas:[{t:'Requisição',tipo:'texto'},{t:'Setor',tipo:'texto'},{t:'Produto',tipo:'texto',larg:34},{t:'Solicitado',tipo:'num'},{t:'Entregue',tipo:'num'},{t:'Unidade',tipo:'texto'}],linhas:itens}]};
+    }
+    case 'pendencias':{
+      const busca=(document.getElementById('pendBusca')?.value||'').toLowerCase().trim(),status=document.getElementById('pendStatusFiltro')?.value||'';
+      const lista=(db.emprestimos||[]).slice().reverse().filter(x=>(!status||x.status===status)&&(!busca||`${x.numero} ${x.pessoa} ${x.obs||''} ${(x.itens||[]).map(i=>i.prod).join(' ')}`.toLowerCase().includes(busca)));
+      const pend=lista.filter(x=>x.status!=='Pago').length;
+      return {...base,titulo:'Pendências (empréstimos)',arquivo:'pendencias',resumo:[['Empréstimos listados',lista.length,'num'],['Pendentes',pend,'num'],['Pagos / devolvidos',lista.length-pend,'num']],
+        secoes:[{nome:'Pendências',titulo:'Empréstimos',colunas:[{t:'Número',tipo:'texto'},{t:'Data',tipo:'data'},{t:'Pessoa',tipo:'texto',larg:24},{t:'Status',tipo:'texto'},{t:'Itens',tipo:'texto',larg:50},{t:'Observação',tipo:'texto',larg:30},{t:'Devolvido em',tipo:'texto',larg:20}],
+          linhas:lista.map(x=>[x.numero,x.data,x.pessoa,x.status,(x.itens||[]).map(i=>`${i.prod} — ${i.qtd} ${i.un||''}`).join('; '),x.obs||'',x.pagoEm||''])}]};
+    }
+    case 'suco':case 'gelo':{
+      const mes=document.getElementById(tipo+'MesFiltro')?.value||mesAtualISO();
+      const lista=(Array.isArray(db.comprasEspeciais)?db.comprasEspeciais:[]).filter(x=>x.tipo===tipo&&String(x.data||'').slice(0,7)===mes).sort((a,b)=>String(b.data||'').localeCompare(String(a.data||'')));
+      const total=x=>Number(x.total)||Number(x.qtd||0)*Number(x.precoUnitario||0);
+      const soma=lista.reduce((s,x)=>s+total(x),0),qtd=lista.reduce((s,x)=>s+(Number(x.qtd)||0),0),[y,m]=mes.split('-');
+      const nome=tipo==='suco'?'Suco de laranja':'Gelo';
+      return {...base,titulo:`${nome} — compras de ${m}/${y}`,arquivo:tipo+'_'+mes,meta:[['Mês de referência',`${m}/${y}`]],
+        resumo:[['Lançamentos',lista.length,'num'],['Quantidade comprada',qtd,'num'],['Gasto no mês',soma,'moeda']],
+        secoes:[{nome:nome,titulo:'Compras',colunas:[{t:'Data',tipo:'data'},{t:'Quantidade',tipo:'num'},{t:'Unidade',tipo:'texto'},{t:'Preço unitário',tipo:'moeda'},{t:'Total',tipo:'moeda'}],
+          linhas:lista.map(x=>[x.data,Number(x.qtd)||0,x.un||'',Number(x.precoUnitario)||0,total(x)])}]};
+    }
+    case 'bebidas':{
+      const drinks=Array.isArray(db.drinks)?db.drinks:[],dest=Array.isArray(db.destilados)?db.destilados:[];
+      const calc=drinks.map(d=>({d,c:drinkCalculos(d)})),media=calc.length?calc.reduce((s,x)=>s+x.c.margem,0)/calc.length:0;
+      return {...base,titulo:'Bebidas — fichas técnicas e destilados',arquivo:'bebidas',
+        resumo:[['Fichas técnicas',drinks.length,'num'],['Destilados cadastrados',dest.length,'num'],['Margem média',media,'pct']],
+        secoes:[{nome:'Fichas técnicas',titulo:'Fichas técnicas de drinks',colunas:[{t:'Drink',tipo:'texto',larg:28},{t:'Categoria',tipo:'texto'},{t:'Rendimento',tipo:'num'},{t:'Custo da ficha',tipo:'moeda'},{t:'Custo por dose',tipo:'moeda'},{t:'Preço de venda',tipo:'moeda'},{t:'Lucro por dose',tipo:'moeda'},{t:'Margem',tipo:'pct'},{t:'Ingredientes',tipo:'texto',larg:50}],
+          linhas:calc.map(({d,c})=>[d.nome,d.categoria||'Outro',c.rendimento,c.custoFicha,c.custo,c.venda,c.lucro,c.margem,(d.ingredientes||[]).map(i=>`${i.nome} ${i.qtd}${i.un}`).join('; ')])},
+          {nome:'Destilados',titulo:'Destilados cadastrados',colunas:[{t:'Destilado',tipo:'texto',larg:28},{t:'Marca',tipo:'texto',larg:22},{t:'Categoria',tipo:'texto'},{t:'Volume (ml)',tipo:'num'},{t:'Preço de compra',tipo:'moeda'},{t:'Custo por ml',tipo:'moeda4'}],
+          linhas:dest.map(x=>[x.nome,x.marca||'',x.categoria||'',Number(x.volumeMl)||0,Number(x.preco)||0,bebidaCustoMl(x)])}]};
+    }
+    case 'inventario':{
+      const lista=(Array.isArray(db.inventarios)?db.inventarios:[]).filter(x=>!isRH()||ehCategoriaRH(x.categoria)).slice().sort((a,b)=>String(b.dataHora||'').localeCompare(String(a.dataHora||'')));
+      return {...base,titulo:'Histórico de inventários',arquivo:'inventarios',resumo:[['Registros',lista.length,'num']],
+        secoes:[{nome:'Inventários',titulo:'Histórico de inventários',colunas:[{t:'Data',tipo:'data'},{t:'Categoria',tipo:'texto',larg:22},{t:'Produto',tipo:'texto',larg:34},{t:'Sistema',tipo:'num'},{t:'Físico',tipo:'num'},{t:'Diferença',tipo:'num'},{t:'Usuário',tipo:'texto',larg:26}],
+          linhas:lista.map(x=>[x.data,x.categoria||'Sem categoria',x.prod,Number(x.sistema)||0,Number(x.fisico)||0,Number(x.diferenca)||0,x.usuario||''])}]};
+    }
+    case 'relatorios':{
+      const mes=document.getElementById('relatorioMes')?.value||mesAtualISO(),[y,m]=mes.split('-');
+      const mov=(db.mov||[]).filter(x=>String(x.data||'').slice(0,7)===mes),req=(db.req||[]).map(normalizeReq).filter(r=>String(r.dataISO||r.data||'').slice(0,7)===mes),compras=(db.comprasEspeciais||[]).filter(x=>String(x.data||'').slice(0,7)===mes);
+      const ent=mov.filter(x=>x.tipo==='entrada').reduce((s,x)=>s+Number(x.qtd||0),0),sai=mov.filter(x=>x.tipo==='saida').reduce((s,x)=>s+Number(x.qtd||0),0),gastos=compras.reduce((s,x)=>s+Number(x.total||0),0),baixo=db.produtos.filter(p=>Number(p.estoque)<=Number(p.min)).length;
+      return {...base,titulo:`Relatório mensal — ${m}/${y}`,arquivo:'relatorio_'+mes,meta:[['Mês de referência',`${m}/${y}`]],
+        resumo:[['Produtos cadastrados',db.produtos.length,'num'],['Com estoque baixo',baixo,'num'],['Entradas no mês (quantidade)',ent,'num'],['Saídas no mês (quantidade)',sai,'num'],['Requisições no mês',req.length,'num'],['Compras especiais (suco e gelo)',gastos,'moeda']],
+        secoes:[
+          {nome:'Sugestão de compras',titulo:'Sugestão de compras',colunas:[{t:'Produto',tipo:'texto',larg:34},{t:'Atual',tipo:'num'},{t:'Mínimo',tipo:'num'},{t:'Ideal',tipo:'num'},{t:'Sugestão de compra',tipo:'num'},{t:'Unidade',tipo:'texto'}],linhas:sugestoesCompra().map(p=>[p.nome,Number(p.estoque)||0,Number(p.min)||0,p.ideal,p.sugerida,p.un||''])},
+          {nome:'Estoque',titulo:'Estoque',colunas:[{t:'Produto',tipo:'texto',larg:34},{t:'Categoria',tipo:'texto',larg:20},{t:'Unidade',tipo:'texto'},{t:'Atual',tipo:'num'},{t:'Mínimo',tipo:'num'},{t:'Ideal',tipo:'num'},{t:'Status',tipo:'texto'}],linhas:db.produtos.slice().sort(_ordNome).map(p=>[p.nome,p.categoria||'Sem categoria',p.un||'',Number(p.estoque)||0,Number(p.min)||0,Number(p.ideal)||0,p.estoque<=p.min?'Baixo':'Normal'])},
+          {nome:'Movimentações',titulo:'Movimentações do mês',colunas:[{t:'Data',tipo:'data'},{t:'Produto',tipo:'texto',larg:34},{t:'Tipo',tipo:'texto'},{t:'Quantidade',tipo:'num'},{t:'Unidade',tipo:'texto'},{t:'Motivo',tipo:'texto',larg:36}],linhas:mov.slice().reverse().map(x=>[x.data,x.prod,x.tipo==='entrada'?'Entrada':'Saída',Number(x.qtd)||0,x.un||'',x.motivo||''])},
+          {nome:'Requisições',titulo:'Requisições do mês',colunas:[{t:'Número',tipo:'texto'},{t:'Setor',tipo:'texto'},{t:'Solicitante',tipo:'texto',larg:22},{t:'Prioridade',tipo:'texto'},{t:'Status',tipo:'texto'}],linhas:req.map(r=>[r.numero,r.setor,r.sol,r.prioridade,r.status])},
+          {nome:'Compras especiais',titulo:'Compras especiais',colunas:[{t:'Data',tipo:'data'},{t:'Tipo',tipo:'texto'},{t:'Quantidade',tipo:'num'},{t:'Unidade',tipo:'texto'},{t:'Total',tipo:'moeda'}],linhas:compras.slice().reverse().map(x=>[x.data,x.tipo==='suco'?'Suco de laranja':'Gelo',Number(x.qtd)||0,x.un||'',Number(x.total)||0])}
+        ]};
+    }
+    case 'cmv':{
+      const mes=document.getElementById('cmvMes')?.value||mesAtualISO(),[y,m]=mes.split('-');
+      renderAnaliseCMV();
+      const resumo=[...document.querySelectorAll('#cmvCards .cmv-stat-card')].map(c=>{const v=(c.querySelector('.stat')?.textContent||'').trim(),n=_numerico(v);return [(c.querySelector('span')?.textContent||'').trim(),n!==null?n:v,n!==null?'num':'texto'];});
+      const secoes=[];
+      [['cmvCategoriaTabela','CMV por categoria'],['cmvDesviosSetor','Desvios por setor']].forEach(([id,tit])=>{const t=document.querySelector('#'+id+' table');if(t)secoes.push(_secaoDeTabelaDOM(tit,t));});
+      [['cmvDesvios','Desvios do CMV'],['cmvEspeciais','Compras especiais']].forEach(([id,tit])=>{const s=_secaoDeBlocosDOM(tit,document.getElementById(id));if(s)secoes.push(s);});
+      secoes.sort((a,b)=>['CMV por categoria','Desvios do CMV','Desvios por setor','Compras especiais'].indexOf(a.titulo)-['CMV por categoria','Desvios do CMV','Desvios por setor','Compras especiais'].indexOf(b.titulo));
+      return {...base,titulo:`Análise de CMV — ${m}/${y}`,arquivo:'cmv_'+mes,meta:[['Mês de referência',`${m}/${y}`]],resumo,secoes};
+    }
+    case 'auditoria':{
+      const q=(document.getElementById('auditoriaBusca')?.value||'').toLowerCase().trim(),t=document.getElementById('auditoriaTipo')?.value||'';
+      const lista=(db.auditoria||[]).filter(x=>(!t||x.tipo===t)&&(!q||`${x.usuario} ${x.acao} ${x.detalhes}`.toLowerCase().includes(q)));
+      return {...base,titulo:'Auditoria do sistema',arquivo:'auditoria',resumo:[['Registros',lista.length,'num']],
+        secoes:[{nome:'Auditoria',titulo:'Registro de atividades',colunas:[{t:'Data/hora',tipo:'texto',larg:20},{t:'Usuário',tipo:'texto',larg:26},{t:'Tipo',tipo:'texto'},{t:'Ação',tipo:'texto',larg:26},{t:'Detalhes',tipo:'texto',larg:60}],
+          linhas:lista.map(x=>[new Date(x.dataHora).toLocaleString('pt-BR'),x.usuario||'',x.tipo||'',x.acao||'',x.detalhes||''])}]};
+    }
+  }
+  return null;
+}
+const _EXPORT_ROTULOS={produtos:'Produtos cadastrados',movimentos:'Entradas e saídas',requisicoes:'Requisições',pendencias:'Pendências (empréstimos)',suco:'Suco de laranja (mês)',gelo:'Gelo (mês)',bebidas:'Bebidas: fichas técnicas e destilados',inventario:'Histórico de inventários',cmv:'Análise de CMV (mês)',relatorios:'Relatório mensal completo',auditoria:'Auditoria'};
+function exportacoesPermitidas(){return Object.keys(_EXPORT_ROTULOS).filter(podeExportar);}
+function podeExportar(tipo){
+  if(!_EXPORT_ROTULOS[tipo]||!currentUser())return false;
+  if(!viewPermitida(tipo))return false;
+  const nav=document.querySelector(`nav button[data-view="${tipo}"]`);
+  if(nav&&nav.dataset.adminOnly==='1'&&!isAdmin())return false;
+  return true;
+}
+
+/* ---------- Saída: Excel e PDF ---------- */
+function exportarExcel(rel){
+  const sub=`Emitido em ${_agoraTxt()} por ${usuarioAtualNome()}`+(rel.meta&&rel.meta.length?' · '+rel.meta.map(x=>x.join(': ')).join(' · '):'');
+  const abas=[];
+  if(rel.secoes.length===1){abas.push({...rel.secoes[0],titulo:rel.titulo,subtitulo:sub,resumo:rel.resumo});}
+  else{
+    if(rel.resumo&&rel.resumo.length)abas.push({nome:'Resumo',titulo:rel.titulo,subtitulo:sub,colunas:[],linhas:[],resumo:rel.resumo});
+    rel.secoes.forEach(s=>abas.push({...s,titulo:s.titulo||s.nome,subtitulo:rel.titulo+' · '+sub}));
+  }
+  _baixarBlob(`O_Estoquista_${rel.arquivo}_${hojeISO()}.xlsx`,gerarXLSX(abas));
+}
+function _fmtPDF(v,tipo){
+  if(v===null||v===undefined||v==='')return '';
+  if(tipo==='num'){const n=Number(v);return Number.isFinite(n)?n.toLocaleString('pt-BR',{maximumFractionDigits:3}):String(v);}
+  if(tipo==='moeda'){const n=Number(v);return Number.isFinite(n)?moedaBR(n):String(v);}
+  if(tipo==='moeda4'){const n=Number(v);return Number.isFinite(n)?n.toLocaleString('pt-BR',{style:'currency',currency:'BRL',minimumFractionDigits:4,maximumFractionDigits:4}):String(v);}
+  if(tipo==='pct'){const n=Number(v);return Number.isFinite(n)?n.toFixed(2).replace('.',',')+'%':String(v);}
+  if(tipo==='data'){const s=String(v);return /^\d{4}-\d{2}-\d{2}/.test(s)?formatDateBR(s.slice(0,10)):s;}
+  return String(v);
+}
+function imprimirRelatorio(rel){
+  document.getElementById('relPrintDoc')?.remove();document.getElementById('relPrintPageStyle')?.remove();
+  const maxCols=Math.max(1,...rel.secoes.map(s=>s.colunas.length)),paisagem=maxCols>6,emitido=_agoraTxt();
+  const alinha=t=>['num','moeda','moeda4','pct'].includes(t)?'rel-r':(t==='data'?'rel-c':'rel-l');
+  const meta=[['Emitido em',emitido],['Emitido por',usuarioAtualNome()],...(rel.meta||[])];
+  const pills=(rel.resumo||[]).map(([rot,val,tipo])=>`<div class="rel-pill"><span>${esc(rot)}</span><b>${esc(_fmtPDF(val,tipo||'texto'))}</b></div>`).join('');
+  const secoes=rel.secoes.map(s=>`<div class="rel-sec">${esc(s.titulo||s.nome)}</div>`+(s.linhas.length
+    ?`<table class="rel-table"><thead><tr>${s.colunas.map(c=>`<th class="${alinha(c.tipo)}">${esc(c.t)}</th>`).join('')}</tr></thead><tbody>${s.linhas.map(l=>`<tr>${s.colunas.map((c,i)=>`<td class="${alinha(c.tipo)}">${esc(_fmtPDF(l[i],c.tipo))}</td>`).join('')}</tr>`).join('')}</tbody></table>`
+    :'<div class="rel-vazio">Nenhum registro para este relatório.</div>')).join('');
+  const doc=document.createElement('div');doc.id='relPrintDoc';
+  doc.innerHTML=`<div class="rel-page"><div class="rel-top"><span class="rel-brand">O ESTOQUISTA</span><span class="rel-doc">Relatório</span></div><div class="rel-title">${esc(rel.titulo)}</div><div class="rel-meta">${meta.map(([a,b])=>`<div><span>${esc(a)}</span><b>${esc(b)}</b></div>`).join('')}</div>${pills?`<div class="rel-pills">${pills}</div>`:''}${secoes}</div><div class="rel-foot">Documento gerado por O Estoquista em ${esc(emitido)}</div>`;
+  document.body.appendChild(doc);
+  const est=document.createElement('style');est.id='relPrintPageStyle';
+  est.textContent=`@page{size:A4 ${paisagem?'landscape':'portrait'};margin:12mm 10mm 16mm;@bottom-right{content:"Página " counter(page) " de " counter(pages);font:8pt Arial,sans-serif;color:#6b7a90}}`;
+  document.head.appendChild(est);
+  const tituloOriginal=document.title;document.title=`${rel.titulo} - ${hojeISO()}`;
+  document.body.classList.add('imprimindo-rel');
+  let limpo=false;
+  const limpar=()=>{if(limpo)return;limpo=true;document.body.classList.remove('imprimindo-rel');doc.remove();est.remove();document.title=tituloOriginal;window.removeEventListener('afterprint',limpar);};
+  window.addEventListener('afterprint',limpar);window.setTimeout(limpar,300000);window.setTimeout(()=>window.print(),150);
+}
+function exportarRelatorio(tipo,formato){
+  if(!podeExportar(tipo)){alert('⛔ Seu perfil não tem permissão para exportar este relatório.');return;}
+  let rel;
+  try{rel=montarRelatorio(tipo);}catch(e){console.error('Falha ao montar relatório',tipo,e);alert('❌ Não foi possível montar o relatório. Tente novamente.');return;}
+  if(!rel){alert('Relatório indisponível.');return;}
+  const temDados=(rel.secoes||[]).some(s=>s.linhas.length)||(rel.resumo||[]).length;
+  if(!temDados){alert('Não há dados para exportar com os filtros atuais.');return;}
+  try{
+    if(formato==='pdf')imprimirRelatorio(rel);else exportarExcel(rel);
+  }catch(e){console.error('Falha ao exportar',e);alert('❌ Não foi possível gerar o arquivo.');}
+}
+
+/* ---------- Botões de exportação nas telas e no Menu ---------- */
+function _barraExportacao(tipo){
+  const d=document.createElement('div');d.className='export-bar';d.dataset.exportTipo=tipo;
+  d.innerHTML=`<span>Exportar:</span><button class="secondary" type="button" onclick="exportarRelatorio('${tipo}','pdf')">📄 PDF</button><button class="green" type="button" onclick="exportarRelatorio('${tipo}','xlsx')">📊 Excel</button>`;
+  return d;
+}
+function montarBarrasExportacao(){
+  const mapa=[['produtos','.products-card h3','afterend'],['movimentos','.mov-page-head','afterend'],['requisicoes','.req-page-head','afterend'],['pendencias','.req-page-head','afterend'],['suco','.special-page-head','afterend'],['gelo','.special-page-head','afterend'],['bebidas','.drinks-page-head','afterend'],['inventario','#inventarioHistoricoCount','afterend'],['cmv','.page-head','afterend'],['relatorios','.page-head','afterend'],['auditoria','.page-head','afterend']];
+  mapa.forEach(([tipo,sel,pos])=>{
+    const secao=document.getElementById(tipo);if(!secao||secao.querySelector('.export-bar'))return;
+    const alvo=secao.querySelector(sel);if(!alvo)return;
+    const ref=tipo==='inventario'?alvo.closest('.inventory-head'):alvo;
+    (ref||alvo).insertAdjacentElement(pos,_barraExportacao(tipo));
+  });
+}
+function renderExportacaoMenu(){
+  const box=document.getElementById('menuExportacaoLista');if(!box)return;
+  box.innerHTML=exportacoesPermitidas().map(t=>`<div class="export-row"><strong>${esc(_EXPORT_ROTULOS[t])}</strong><div class="export-btns"><button class="secondary" type="button" onclick="exportarRelatorio('${t}','pdf')">📄 PDF</button><button class="green" type="button" onclick="exportarRelatorio('${t}','xlsx')">📊 Excel</button></div></div>`).join('')||'<p class="muted">Nenhum relatório disponível para o seu perfil.</p>';
+}
+
+/* ---------- Aplicativo instalável (PWA) ---------- */
+let _promptInstalar=null;
+function appJaInstalado(){return (window.matchMedia&&window.matchMedia('(display-mode: standalone)').matches)||window.navigator.standalone===true;}
+function atualizarCardInstalar(){
+  const card=document.getElementById('cardInstalarApp');if(!card)return;
+  const btn=document.getElementById('btnInstalarApp'),txt=document.getElementById('instalarTexto');
+  const ios=/iphone|ipad|ipod/i.test(navigator.userAgent);
+  if(appJaInstalado()){if(txt)txt.textContent='✅ O Estoquista já está instalado neste aparelho.';if(btn)btn.style.display='none';return;}
+  if(_promptInstalar){if(txt)txt.textContent='Instale o O Estoquista na tela inicial do aparelho: abre em tela cheia, como um aplicativo.';if(btn)btn.style.display='inline-block';return;}
+  if(btn)btn.style.display='none';
+  if(txt)txt.textContent=ios?'No iPhone/iPad: abra este site no Safari, toque em Compartilhar e escolha "Adicionar à Tela de Início".':'Para instalar: abra o menu do navegador (⋮) e escolha "Instalar aplicativo" ou "Adicionar à tela inicial".';
+}
+async function instalarApp(){
+  if(!_promptInstalar)return;
+  _promptInstalar.prompt();
+  try{await _promptInstalar.userChoice;}catch(_e){}
+  _promptInstalar=null;atualizarCardInstalar();
+}
+window.addEventListener('beforeinstallprompt',e=>{e.preventDefault();_promptInstalar=e;atualizarCardInstalar();});
+window.addEventListener('appinstalled',()=>{_promptInstalar=null;atualizarCardInstalar();});
+if('serviceWorker' in navigator&&/^https?:$/.test(location.protocol)){
+  window.addEventListener('load',()=>{navigator.serviceWorker.register('sw.js').catch(e=>console.warn('Service worker não registrado:',e));});
+}
+montarBarrasExportacao();
+atualizarCardInstalar();
+
+
 document.querySelectorAll("nav button").forEach(b=>{ b.setAttribute("type","button"); b.onclick=()=>{
   if(b.dataset.adminOnly==="1" && !isAdmin()){ alert("🔒 Acesso restrito ao Administrador."); return; }
   if(!viewPermitida(b.dataset.view)){ alert("🔒 Seu perfil não tem acesso a esta área."); return; }
