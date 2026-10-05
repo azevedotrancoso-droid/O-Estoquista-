@@ -2,11 +2,15 @@
    - Rede primeiro: sempre busca a versão mais nova dos arquivos do site (atualizações chegam sozinhas).
    - Se estiver sem internet, abre a última versão guardada.
    - Nunca guarda nem intercepta pedidos ao Supabase (dados sempre vêm da nuvem). */
-const VERSAO = 'estoquista-v1';
-const ARQUIVOS = ['./', 'index.html', 'style.css', 'script.js', 'logo.png', 'manifest.webmanifest', 'icons/icon-192.png', 'icons/icon-512.png'];
+const VERSAO = 'estoquista-v2';
+const ARQUIVOS = ['./', 'index.html', 'style.css', 'script.js', 'logo.png', 'manifest.webmanifest', 'icon-192.png', 'icon-512.png'];
 
 self.addEventListener('install', (e) => {
-  e.waitUntil(caches.open(VERSAO).then((c) => c.addAll(ARQUIVOS)).then(() => self.skipWaiting()));
+  e.waitUntil(
+    caches.open(VERSAO)
+      .then((c) => Promise.allSettled(ARQUIVOS.map((a) => c.add(a))))
+      .then(() => self.skipWaiting())
+  );
 });
 
 self.addEventListener('activate', (e) => {
