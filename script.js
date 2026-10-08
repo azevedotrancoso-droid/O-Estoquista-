@@ -852,6 +852,11 @@ function atualizarPreviewCompras(){
   const se=document.getElementById('sucoLancamentoTotal'),ge=document.getElementById('geloLancamentoTotal');
   if(se)se.textContent=moedaBR(s); if(ge)ge.textContent=moedaBR(g);
 }
+function produtoCompraEspecial(tipo){
+  const n=x=>String(x||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
+  const lista=(db.produtos||[]).filter(p=>{const nome=n(p.nome);return tipo==='suco'?(nome.includes('suco')&&nome.includes('laranja')):nome.includes('gelo');});
+  return lista.find(p=>n(p.categoria).includes('camara'))||lista[0]||null;
+}
 function addCompraEspecial(tipo){
   if(!canEditStock())return denyOperate();
   const prefix=tipo==='suco'?'suco':'gelo';
@@ -862,8 +867,21 @@ function addCompraEspecial(tipo){
   if(!Number.isFinite(preco)||preco<=0)return alert('Informe um preço válido.');
   if(!data)return alert('Selecione a data da compra.');
   const un=tipo==='suco'?'Galão de 5 litros':'Pacote';
-  db.comprasEspeciais.push({id:id(),tipo,qtd,un,precoUnitario:preco,total:qtd*preco,data});
-  registrarAuditoria('Compra','Lançou compra',`${tipo==='suco'?'Suco de laranja':'Gelo'} · ${qtd} ${un} · ${moedaBR(qtd*preco)} · ${data}`);
+  const compraId=id();
+  const prod=produtoCompraEspecial(tipo);
+  if(!prod){
+    const nomeTipo=tipo==='suco'?'suco de laranja':'gelo';
+    if(!confirm(`Não encontrei o produto de ${nomeTipo} em Produtos, então o estoque não será atualizado.\n\nCadastre o produto (ex.: "${tipo==='suco'?'Suco de laranja':'Gelo em cubo'}") e lance de novo.\n\nLançar somente a compra, sem atualizar o estoque?`))return;
+  }
+  const compra={id:compraId,tipo,qtd,un,precoUnitario:preco,total:qtd*preco,data};
+  if(prod){
+    prod.estoque=arred((Number(prod.estoque)||0)+qtd);
+    const movId=id();
+    db.mov.push({id:movId,data,prodId:prod.id,prod:prod.nome,tipo:'entrada',qtd,un:prod.un,motivo:`Compra de ${tipo==='suco'?'suco de laranja':'gelo'}`,origem:'compra_especial',compraId});
+    compra.prodId=prod.id; compra.movId=movId;
+  }
+  db.comprasEspeciais.push(compra);
+  registrarAuditoria('Compra','Lançou compra',`${tipo==='suco'?'Suco de laranja':'Gelo'} · ${qtd} ${un} · ${moedaBR(qtd*preco)} · ${data}${prod?` · Estoque de ${prod.nome} +${qtd} ${prod.un}`:' · Sem atualização de estoque'}`);
   save();
   const q=document.getElementById(prefix+'Qtd'), pr=document.getElementById(prefix+'Preco');
   if(q)q.value=1; if(pr&&tipo==='suco')pr.value='45.00'; if(pr&&tipo==='gelo')pr.value='';
@@ -888,7 +906,12 @@ function renderComprasEspeciais(){
 function deleteCompraEspecial(i){
   if(!canDelete()){denyDelete();return;}
   const item=db.comprasEspeciais.find(x=>String(x.id)===String(i)); if(!item)return;
-  if(!confirm(`Apagar esta compra de ${item.tipo==='suco'?'suco de laranja':'gelo'}?`))return;
+  if(!confirm(`Apagar esta compra de ${item.tipo==='suco'?'suco de laranja':'gelo'}?${item.prodId?'\n\nO estoque será ajustado automaticamente.':''}`))return;
+  if(item.prodId){
+    const p=(db.produtos||[]).find(x=>String(x.id)===String(item.prodId));
+    if(p)p.estoque=arred(Math.max(0,(Number(p.estoque)||0)-Number(item.qtd||0)));
+    db.mov=(db.mov||[]).filter(m=>!(String(m.compraId||'')===String(item.id)));
+  }
   db.comprasEspeciais=db.comprasEspeciais.filter(x=>String(x.id)!==String(i)); registrarAuditoria("Compra","Excluiu compra",`${item.tipo==='suco'?'Suco de laranja':'Gelo'} · ${item.qtd} ${item.un} · ${item.data}`); save();
 }
 
