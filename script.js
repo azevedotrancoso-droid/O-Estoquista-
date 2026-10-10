@@ -319,6 +319,7 @@ if(!Array.isArray(db.inventarios))db.inventarios=[];
 if(!Array.isArray(db.destilados))db.destilados=[];
 if(!Array.isArray(db.drinks))db.drinks=[];
 if(!Array.isArray(db.categorias))db.categorias=[];
+if(!Array.isArray(db.rnc))db.rnc=[];
 db.produtos.forEach(p=>{ if(!Number.isFinite(Number(p.ideal))) p.ideal=Math.max(Number(p.min)||0,(Number(p.min)||0)*2); });
 const CATEGORIAS_PADRAO=["Camara Fria","Estoque Seco","Destilados","Limpeza","Refrigerantes","Cervejas e chopp","Uniformes"];
 const categoriasLegadas=[...db.produtos.map(p=>String(p.categoria||"").trim()).filter(Boolean)];
@@ -431,6 +432,10 @@ const ICON_PATHS={
   '👤':'<circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/>',
   '⚙️':'<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.8 1.8 0 0 0 .36 2l.06.06-1.9 1.9-.06-.06a1.8 1.8 0 0 0-2-.36 1.8 1.8 0 0 0-1.1 1.65V21h-2.7v-.08A1.8 1.8 0 0 0 11 19.27a1.8 1.8 0 0 0-2-.36l-.06.06-1.9-1.9.06-.06a1.8 1.8 0 0 0 .36-2A1.8 1.8 0 0 0 5.81 14H5.7v-2.7h.11A1.8 1.8 0 0 0 7.46 10a1.8 1.8 0 0 0-.36-2l-.06-.06 1.9-1.9.06.06a1.8 1.8 0 0 0 2 .36A1.8 1.8 0 0 0 12.1 4.8V4h2.7v.8a1.8 1.8 0 0 0 1.1 1.65 1.8 1.8 0 0 0 2-.36l.06-.06 1.9 1.9-.06.06a1.8 1.8 0 0 0-.36 2 1.8 1.8 0 0 0 1.65 1.1h.11V14h-.11A1.8 1.8 0 0 0 19.4 15z"/>',
   '⚙':'<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.8 1.8 0 0 0 .36 2l.06.06-1.9 1.9-.06-.06a1.8 1.8 0 0 0-2-.36 1.8 1.8 0 0 0-1.1 1.65V21h-2.7v-.08A1.8 1.8 0 0 0 11 19.27a1.8 1.8 0 0 0-2-.36l-.06.06-1.9-1.9.06-.06a1.8 1.8 0 0 0 .36-2A1.8 1.8 0 0 0 5.81 14H5.7v-2.7h.11A1.8 1.8 0 0 0 7.46 10a1.8 1.8 0 0 0-.36-2l-.06-.06 1.9-1.9.06.06a1.8 1.8 0 0 0 2 .36A1.8 1.8 0 0 0 12.1 4.8V4h2.7v.8a1.8 1.8 0 0 0 1.1 1.65 1.8 1.8 0 0 0 2-.36l.06-.06 1.9 1.9-.06.06a1.8 1.8 0 0 0-.36 2 1.8 1.8 0 0 0 1.65 1.1h.11V14h-.11A1.8 1.8 0 0 0 19.4 15z"/>',
+  '⚠️':'<path d="M12 3 2.7 20h18.6z"/><path d="M12 9v5M12 17h.01"/>',
+  '⚠':'<path d="M12 3 2.7 20h18.6z"/><path d="M12 9v5M12 17h.01"/>',
+  '📷':'<path d="M4 8h3l1.5-2h7L17 8h3v11H4z"/><circle cx="12" cy="13" r="3.5"/>',
+  '📅':'<rect x="4" y="5" width="16" height="15" rx="2"/><path d="M4 10h16M8 3v4M16 3v4"/>',
   '🚨':'<path d="M12 3 2.7 20h18.6z"/><path d="M12 9v5M12 17h.01"/>',
   '🔎':'<circle cx="10.5" cy="10.5" r="6"/><path d="m16 16 5 5"/>',
   '📄':'<path d="M6 3h9l4 4v14H6z"/><path d="M15 3v5h5M9 13h6M9 17h6"/>',
@@ -519,6 +524,7 @@ function render(){
  renderProdutos();
  renderRequisicoes();
  renderPendencias();
+ renderRnc();
  renderMovimentos();
   renderNotas();
   renderComprasEspeciais();
@@ -1775,6 +1781,11 @@ function montarRelatorio(tipo){
       secoes.sort((a,b)=>['CMV por categoria','Desvios do CMV','Desvios por setor','Compras especiais'].indexOf(a.titulo)-['CMV por categoria','Desvios do CMV','Desvios por setor','Compras especiais'].indexOf(b.titulo));
       return {...base,titulo:`Análise de CMV — ${m}/${y}`,arquivo:'cmv_'+mes,meta:[['Mês de referência',`${m}/${y}`]],resumo,secoes};
     }
+    case 'rnc':{
+      const lista=rncFiltradas().slice().reverse();
+      const t=document.getElementById('rncTipoFiltro')?.value||'',st=document.getElementById('rncStatusFiltro')?.value||'';
+      return {...rncRelatorio(lista,'RNC — Registros de não conformidade'),meta:[...(t?[['Problema',t]]:[]),...(st?[['Status',st]]:[])]};
+    }
     case 'auditoria':{
       const q=(document.getElementById('auditoriaBusca')?.value||'').toLowerCase().trim(),t=document.getElementById('auditoriaTipo')?.value||'';
       const lista=(db.auditoria||[]).filter(x=>(!t||x.tipo===t)&&(!q||`${x.usuario} ${x.acao} ${x.detalhes}`.toLowerCase().includes(q)));
@@ -1785,7 +1796,7 @@ function montarRelatorio(tipo){
   }
   return null;
 }
-const _EXPORT_ROTULOS={produtos:'Produtos cadastrados',movimentos:'Entradas e saídas',requisicoes:'Requisições',pendencias:'Pendências (empréstimos)',suco:'Suco de laranja (mês)',gelo:'Gelo (mês)',bebidas:'Bebidas: fichas técnicas e destilados',inventario:'Histórico de inventários',cmv:'Análise de CMV (mês)',relatorios:'Relatório mensal completo',auditoria:'Auditoria'};
+const _EXPORT_ROTULOS={produtos:'Produtos cadastrados',movimentos:'Entradas e saídas',requisicoes:'Requisições',pendencias:'Pendências (empréstimos)',suco:'Suco de laranja (mês)',gelo:'Gelo (mês)',bebidas:'Bebidas: fichas técnicas e destilados',inventario:'Histórico de inventários',cmv:'Análise de CMV (mês)',relatorios:'Relatório mensal completo',rnc:'RNC (não conformidades)',auditoria:'Auditoria'};
 function exportacoesPermitidas(){return Object.keys(_EXPORT_ROTULOS).filter(podeExportar);}
 function podeExportar(tipo){
   if(!_EXPORT_ROTULOS[tipo]||!currentUser())return false;
@@ -1855,7 +1866,7 @@ function _barraExportacao(tipo){
   return d;
 }
 function montarBarrasExportacao(){
-  const mapa=[['produtos','.products-card h3','afterend'],['movimentos','.mov-page-head','afterend'],['requisicoes','.req-page-head','afterend'],['pendencias','.req-page-head','afterend'],['suco','.special-page-head','afterend'],['gelo','.special-page-head','afterend'],['bebidas','.drinks-page-head','afterend'],['inventario','#inventarioHistoricoCount','afterend'],['cmv','.page-head','afterend'],['relatorios','.page-head','afterend'],['auditoria','.page-head','afterend']];
+  const mapa=[['produtos','.products-card h3','afterend'],['movimentos','.mov-page-head','afterend'],['requisicoes','.req-page-head','afterend'],['pendencias','.req-page-head','afterend'],['suco','.special-page-head','afterend'],['gelo','.special-page-head','afterend'],['bebidas','.drinks-page-head','afterend'],['inventario','#inventarioHistoricoCount','afterend'],['rnc','.req-page-head','afterend'],['cmv','.page-head','afterend'],['relatorios','.page-head','afterend'],['auditoria','.page-head','afterend']];
   mapa.forEach(([tipo,sel,pos])=>{
     const secao=document.getElementById(tipo);if(!secao||secao.querySelector('.export-bar'))return;
     const alvo=secao.querySelector(sel);if(!alvo)return;
@@ -1866,6 +1877,176 @@ function montarBarrasExportacao(){
 function renderExportacaoMenu(){
   const box=document.getElementById('menuExportacaoLista');if(!box)return;
   box.innerHTML=exportacoesPermitidas().map(t=>`<div class="export-row"><strong>${esc(_EXPORT_ROTULOS[t])}</strong><div class="export-btns"><button class="secondary" type="button" onclick="exportarRelatorio('${t}','pdf')">📄 PDF</button><button class="green" type="button" onclick="exportarRelatorio('${t}','xlsx')">📊 Excel</button></div></div>`).join('')||'<p class="muted">Nenhum relatório disponível para o seu perfil.</p>';
+}
+
+/* ---------- RNC (Registro de Não Conformidade) ---------- */
+let rncFotoTemp='';
+function rncLista(){if(!Array.isArray(db.rnc))db.rnc=[];return db.rnc;}
+function rncStatus(r){return r&&r.status==='Resolvida'?'Resolvida':'Aberta';}
+function rncProximoNumero(){
+  const nums=rncLista().map(r=>parseInt(String(r.numero||'').replace(/\D/g,''),10)).filter(Number.isFinite);
+  const base=nums.length?Math.max(...nums):0;
+  return 'RNC-'+String(base+1).padStart(4,'0');
+}
+function rncCatDe(p){return String(p&&p.categoria||'Sem categoria').trim()||'Sem categoria';}
+function rncPopularCategorias(){
+  const sel=document.getElementById('rncCategoria');if(!sel)return;
+  const cats=[...new Set(db.produtos.filter(produtoVisivel).map(rncCatDe))].sort((a,b)=>a.localeCompare(b,'pt-BR'));
+  const html='<option value="">Selecione a categoria...</option>'+cats.map(c=>`<option value="${esc(c)}">${esc(c)}</option>`).join('');
+  if(sel.dataset.sig!==html){
+    const atual=sel.value;sel.innerHTML=html;sel.dataset.sig=html;
+    if(cats.includes(atual))sel.value=atual;
+  }
+  rncPopularProdutos();
+}
+function rncPopularProdutos(){
+  const catSel=document.getElementById('rncCategoria'),sel=document.getElementById('rncProduto');if(!catSel||!sel)return;
+  const cat=catSel.value;
+  if(!cat){
+    const vazio='<option value="">Selecione a categoria primeiro</option>';
+    if(sel.dataset.sig!==vazio){sel.innerHTML=vazio;sel.dataset.sig=vazio;}
+    sel.disabled=true;return;
+  }
+  sel.disabled=false;
+  const lista=db.produtos.filter(produtoVisivel).filter(p=>rncCatDe(p)===cat).sort(_ordNome);
+  const html='<option value="">Selecione o produto...</option>'+lista.map(p=>`<option value="${esc(p.id)}">${esc(p.nome)}</option>`).join('');
+  if(sel.dataset.sig!==html){
+    const atual=sel.value;sel.innerHTML=html;sel.dataset.sig=html;
+    if(lista.some(p=>String(p.id)===String(atual)))sel.value=atual;
+  }
+}
+function rncRenderFotoPreview(){
+  const box=document.getElementById('rncFotoPreview');if(!box)return;
+  box.innerHTML=rncFotoTemp?`<img src="${rncFotoTemp}" alt="Pré-visualização da foto"><button type="button" class="secondary" onclick="rncRemoverFoto()">Remover foto</button>`:'';
+  const t=document.getElementById('rncFotoBtnTxt');if(t)t.textContent=rncFotoTemp?'Trocar foto':'Adicionar foto';
+}
+function rncRemoverFoto(){rncFotoTemp='';rncRenderFotoPreview();}
+function rncCarregarFoto(input){
+  const f=input.files&&input.files[0];if(!f)return;
+  if(!/^image\//.test(f.type)){alert('Selecione um arquivo de imagem.');input.value='';return;}
+  const rd=new FileReader();
+  rd.onerror=()=>alert('Não foi possível ler a foto. Tente novamente.');
+  rd.onload=()=>{
+    const img=new Image();
+    img.onerror=()=>alert('Não foi possível abrir esta imagem. Tente outra foto.');
+    img.onload=()=>{
+      // Reduz a foto para não pesar no armazenamento (os dados ficam salvos junto com o sistema).
+      let escala=Math.min(1,800/Math.max(img.width,img.height)),q=.7,url='';
+      for(let i=0;i<8;i++){
+        const w=Math.max(1,Math.round(img.width*escala)),h=Math.max(1,Math.round(img.height*escala));
+        const c=document.createElement('canvas');c.width=w;c.height=h;
+        const ctx=c.getContext('2d');ctx.fillStyle='#fff';ctx.fillRect(0,0,w,h);ctx.drawImage(img,0,0,w,h);
+        url=c.toDataURL('image/jpeg',q);
+        if(url.length<=150000)break;
+        q=Math.max(.4,q-.08);escala*=.85;
+      }
+      rncFotoTemp=url;rncRenderFotoPreview();
+    };
+    img.src=rd.result;
+  };
+  rd.readAsDataURL(f);
+  input.value='';
+}
+function addRnc(){
+  const u=currentUser();
+  if(!u||!canOperateStock())return alert('⛔ Seu perfil não tem permissão para registrar RNC.');
+  const cat=document.getElementById('rncCategoria').value;
+  const prod=db.produtos.find(p=>String(p.id)===String(document.getElementById('rncProduto').value));
+  if(!cat||!prod)return alert('Selecione a categoria e o produto.');
+  const tipo=document.getElementById('rncTipo').value;
+  if(!tipo)return alert('Selecione o tipo de problema.');
+  const r={id:id(),numero:rncProximoNumero(),data:hojeISO(),dataHora:new Date().toISOString(),categoria:rncCatDe(prod),prodId:prod.id,prod:prod.nome,un:prod.un||'',tipo,nota:(document.getElementById('rncNota').value||'').trim(),descricao:(document.getElementById('rncDescricao').value||'').trim(),foto:rncFotoTemp||'',status:'Aberta',usuario:usuarioAtualNome()};
+  rncLista().push(r);
+  registrarAuditoria('RNC','Solicitou RNC',`${r.numero} · ${r.prod} · ${r.tipo}`);
+  if(!save()){
+    db.rnc=db.rnc.filter(x=>x.id!==r.id);
+    if(db.auditoria[0]&&db.auditoria[0].acao==='Solicitou RNC')db.auditoria.shift();
+    alert('❌ Não foi possível salvar a RNC. Se ela tem foto, tente uma foto menor ou sem foto.');
+    return;
+  }
+  ['rncDescricao','rncNota'].forEach(i=>{document.getElementById(i).value='';});
+  document.getElementById('rncTipo').value='';document.getElementById('rncProduto').value='';
+  rncFotoTemp='';rncRenderFotoPreview();
+  if(confirm(`✅ ${r.numero} solicitada com sucesso.\n\nDeseja gerar o PDF agora?`))rncExportarPDF(r.id);
+}
+function rncResolver(i){
+  if(!currentUser()||!canOperateStock())return alert('⛔ Seu perfil não tem permissão para alterar RNC.');
+  const r=rncLista().find(x=>String(x.id)===String(i));if(!r||rncStatus(r)==='Resolvida')return;
+  const retorno=prompt(`Resolver ${r.numero}.\n\nRetorno do fornecedor / como foi resolvido (opcional):`,'');
+  if(retorno===null)return;
+  r.status='Resolvida';r.retorno=String(retorno).trim();r.resolvidaData=hojeISO();r.resolvidaPor=usuarioAtualNome();
+  registrarAuditoria('RNC','Marcou RNC como resolvida',`${r.numero} · ${r.prod}`);
+  save();
+}
+function rncReabrir(i){
+  if(!currentUser()||!canOperateStock())return alert('⛔ Seu perfil não tem permissão para alterar RNC.');
+  const r=rncLista().find(x=>String(x.id)===String(i));if(!r||rncStatus(r)!=='Resolvida')return;
+  if(!confirm(`Reabrir ${r.numero}?`))return;
+  r.status='Aberta';delete r.retorno;delete r.resolvidaData;delete r.resolvidaPor;
+  registrarAuditoria('RNC','Reabriu RNC',`${r.numero} · ${r.prod}`);
+  save();
+}
+function rncFiltradas(){
+  const busca=(document.getElementById('rncBusca')?.value||'').toLowerCase().trim(),tipo=document.getElementById('rncTipoFiltro')?.value||'',st=document.getElementById('rncStatusFiltro')?.value||'';
+  return rncLista().filter(x=>(!tipo||x.tipo===tipo)&&(!st||rncStatus(x)===st)&&(!busca||`${x.numero} ${x.prod} ${x.categoria} ${x.tipo} ${x.nota||''} ${x.descricao||''} ${x.retorno||''}`.toLowerCase().includes(busca)));
+}
+function limparFiltrosRnc(){['rncBusca','rncTipoFiltro','rncStatusFiltro'].forEach(i=>{const e=document.getElementById(i);if(e)e.value='';});renderRnc();}
+function renderRnc(){
+  rncPopularCategorias();
+  const box=document.getElementById('rncList');if(!box)return;
+  const todas=rncLista(),total=todas.length,abertas=todas.filter(r=>rncStatus(r)==='Aberta').length;
+  [['rncCount',total],['rncAbertas',abertas],['rncResolvidas',total-abertas]].forEach(([i,v])=>{const e=document.getElementById(i);if(e)e.textContent=v;});
+  const list=rncFiltradas().slice().reverse();
+  if(!list.length){box.innerHTML='<div class="req-empty">'+(total?'Nenhuma RNC encontrada com esses filtros.':'Nenhuma RNC registrada ainda.')+'</div>';return;}
+  const podeOperar=!!currentUser()&&canOperateStock();
+  box.innerHTML=list.map(r=>{
+    const res=rncStatus(r)==='Resolvida';
+    return `<div class="req-card rnc-item ${res?'rnc-resolvida':'rnc-aberta'}"><div class="req-card-top"><div><div class="req-code">${esc(r.numero)}</div><div class="req-meta">📦 ${esc(r.prod)} · ${esc(r.categoria||'Sem categoria')}<br>📅 ${esc(formatDateBR(r.data))} · 👤 ${esc(r.usuario||'—')}${r.nota?`<br>🧾 Nota fiscal ${esc(r.nota)}`:''}</div></div><span class="req-badge ${res?'status-entregue':'status-pendente'}">${res?'Resolvida':'Aberta'}</span></div><div class="pend-items"><span>${esc(r.tipo)}</span></div>${r.descricao?`<div class="req-bottom rnc-desc">${esc(r.descricao)}</div>`:''}${r.foto?`<img class="rnc-thumb" src="${r.foto}" alt="Foto da ${esc(r.numero)}" onclick="rncAbrirFoto('${esc(r.id)}')">`:''}${res?`<div class="rnc-retorno"><b>Resolvida em ${esc(formatDateBR(r.resolvidaData))}</b>${r.resolvidaPor?` por ${esc(r.resolvidaPor)}`:''}${r.retorno?`<div>${esc(r.retorno)}</div>`:''}</div>`:''}<div class="pend-actions">${podeOperar?(res?`<button class="secondary" type="button" onclick="rncReabrir('${esc(r.id)}')">🔄 Reabrir</button>`:`<button class="green" type="button" onclick="rncResolver('${esc(r.id)}')">✅ Marcar como resolvida</button>`):''}<button class="secondary" type="button" onclick="rncExportarPDF('${esc(r.id)}')">📄 PDF</button><button class="secondary" type="button" onclick="rncExportarExcel('${esc(r.id)}')">📊 Excel</button>${canDelete()?`<button class="danger" type="button" onclick="rncExcluir('${esc(r.id)}')">🗑️ Excluir</button>`:''}</div></div>`;
+  }).join('');
+  normalizeIcons(box);
+}
+function rncAbrirFoto(i){
+  const r=rncLista().find(x=>String(x.id)===String(i));if(!r||!r.foto)return;
+  const ov=document.createElement('div');ov.className='rnc-lightbox';
+  ov.innerHTML=`<img src="${r.foto}" alt="Foto da ${esc(r.numero)}"><button type="button">Fechar</button>`;
+  ov.onclick=()=>ov.remove();document.body.appendChild(ov);
+}
+function rncExcluir(i){
+  if(!canDelete())return denyDelete();
+  const r=rncLista().find(x=>String(x.id)===String(i));if(!r)return;
+  if(!confirm(`Excluir ${r.numero} (${r.prod})?`))return;
+  registrarAuditoria('RNC','Excluiu RNC',`${r.numero} · ${r.prod}`);
+  db.rnc=db.rnc.filter(x=>String(x.id)!==String(i));save();
+}
+function rncRelatorio(lista,titulo){
+  const ab=lista.filter(r=>rncStatus(r)==='Aberta').length;
+  return {meta:[],titulo,arquivo:'rnc',
+    resumo:[['RNCs listadas',lista.length,'num'],['Abertas',ab,'num'],['Resolvidas',lista.length-ab,'num']],
+    secoes:[{nome:'RNC',titulo:'Registros de RNC',colunas:[{t:'Número',tipo:'texto'},{t:'Data',tipo:'data'},{t:'Categoria',tipo:'texto',larg:20},{t:'Produto',tipo:'texto',larg:34},{t:'Nota fiscal',tipo:'texto',larg:14},{t:'Tipo de problema',tipo:'texto',larg:32},{t:'Descrição',tipo:'texto',larg:46},{t:'Status',tipo:'texto'},{t:'Retorno do fornecedor',tipo:'texto',larg:40},{t:'Resolvida em',tipo:'data'},{t:'Foto',tipo:'texto'},{t:'Solicitante',tipo:'texto',larg:26}],
+      linhas:lista.map(r=>[r.numero,r.data,r.categoria||'Sem categoria',r.prod,r.nota||'',r.tipo,r.descricao||'',rncStatus(r),r.retorno||'',r.resolvidaData||'',r.foto?'Sim':'Não',r.usuario||''])}]};
+}
+function rncExportarExcel(i){
+  const r=rncLista().find(x=>String(x.id)===String(i));if(!r)return;
+  try{const rel=rncRelatorio([r],'RNC '+r.numero);rel.arquivo='rnc_'+r.numero;rel.resumo=[];exportarExcel(rel);}
+  catch(e){console.error('Falha ao exportar RNC',e);alert('❌ Não foi possível gerar o arquivo.');}
+}
+function rncExportarPDF(i){
+  const r=rncLista().find(x=>String(x.id)===String(i));if(!r)return;
+  document.getElementById('relPrintDoc')?.remove();document.getElementById('relPrintPageStyle')?.remove();
+  const emitido=_agoraTxt(),res=rncStatus(r)==='Resolvida';
+  const meta=[['Data da RNC',formatDateBR(r.data)],['Status',rncStatus(r)],['Categoria',r.categoria||'Sem categoria'],['Produto',r.prod],['Nota fiscal',r.nota||'—'],['Tipo de problema',r.tipo],['Solicitante',r.usuario||'—'],['Emitido em',emitido]];
+  const retorno=res?`<div class="rel-sec">Resolução</div><div class="rnc-doc-texto"><b>Resolvida em ${esc(formatDateBR(r.resolvidaData))}</b>${r.resolvidaPor?` por ${esc(r.resolvidaPor)}`:''}${r.retorno?`<br>${esc(r.retorno)}`:''}</div>`:'';
+  const doc=document.createElement('div');doc.id='relPrintDoc';
+  doc.innerHTML=`<div class="rel-page"><div class="rel-top"><span class="rel-brand">O ESTOQUISTA</span><span class="rel-doc">RNC — Registro de não conformidade</span></div><div class="rel-title">${esc(r.numero)}</div><div class="rel-meta">${meta.map(([a,b])=>`<div><span>${esc(a)}</span><b>${esc(b)}</b></div>`).join('')}</div><div class="rel-sec">Descrição</div><div class="rnc-doc-texto">${r.descricao?esc(r.descricao):'<i>Sem descrição.</i>'}</div>${retorno}${r.foto?`<div class="rel-sec">Foto</div><div class="rnc-doc-foto"><img src="${r.foto}" alt="Foto da ${esc(r.numero)}"></div>`:''}</div><div class="rel-foot">Documento gerado por O Estoquista em ${esc(emitido)}</div>`;
+  document.body.appendChild(doc);
+  const est=document.createElement('style');est.id='relPrintPageStyle';
+  est.textContent='@page{size:A4 portrait;margin:12mm 10mm 16mm}';document.head.appendChild(est);
+  const tituloOriginal=document.title;document.title=`${r.numero} - ${r.prod}`;
+  document.body.classList.add('imprimindo-rel');
+  let limpo=false;
+  const limpar=()=>{if(limpo)return;limpo=true;document.body.classList.remove('imprimindo-rel');doc.remove();est.remove();document.title=tituloOriginal;window.removeEventListener('afterprint',limpar);};
+  window.addEventListener('afterprint',limpar);window.setTimeout(limpar,300000);
+  Promise.all([...doc.querySelectorAll('img')].map(im=>im.decode?im.decode().catch(()=>{}):null)).then(()=>window.setTimeout(()=>window.print(),150));
 }
 
 /* ---------- Aplicativo instalável (PWA) ---------- */

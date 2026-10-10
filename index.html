@@ -67,7 +67,7 @@ function toggleLoginPass(){
 <header aria-label="O Estoquista"><div class="brand"><span class="brand-icon" aria-hidden="true"><img src="logo-mark.png" alt="" width="26" height="31"></span><span>O Estoquista</span></div><small>Controle de estoque,<br>requisições, entradas e saídas</small></header>
 <nav id="nav">
 <button data-view="inicio" class="active">🏠 Início</button><button data-view="produtos">📦 Produtos</button>
-<button data-view="requisicoes">📋 Requisições</button><button data-view="pendencias">📌 Pendências</button><button data-view="anotacoes">📝 Anotações</button><button data-view="movimentos">🔄 Entradas/Saídas</button><button data-view="suco">🍊 Suco de Laranja</button><button data-view="gelo">🧊 Gelo</button><button data-view="bebidas">🍸 Bebidas</button><button data-view="inventario">📋 Inventário</button><button data-view="cmv"><span class="nav-icon nav-icon-cmv" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="3.5" y="3.5" width="17" height="17" rx="2"/><path d="M7 16l3.2-3.6 2.7 2.1L17 9"/><path d="M17 9h-3M17 9v3"/></svg></span><span>Análise de CMV</span></button><button data-view="relatorios" data-admin-only="1">📊 Relatórios</button><button data-view="auditoria" data-admin-only="1">🛡️ Auditoria</button>
+<button data-view="requisicoes">📋 Requisições</button><button data-view="pendencias">📌 Pendências</button><button data-view="anotacoes">📝 Anotações</button><button data-view="movimentos">🔄 Entradas/Saídas</button><button data-view="suco">🍊 Suco de Laranja</button><button data-view="gelo">🧊 Gelo</button><button data-view="bebidas">🍸 Bebidas</button><button data-view="inventario">📋 Inventário</button><button data-view="rnc"><span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M6 3h8l4 4v14H6z"/><path d="M14 3v4h4"/><path d="M12 11v4M12 18h.01"/></svg></span><span>RNC</span></button><button data-view="cmv"><span class="nav-icon nav-icon-cmv" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="3.5" y="3.5" width="17" height="17" rx="2"/><path d="M7 16l3.2-3.6 2.7 2.1L17 9"/><path d="M17 9h-3M17 9v3"/></svg></span><span>Análise de CMV</span></button><button data-view="relatorios" data-admin-only="1">📊 Relatórios</button><button data-view="auditoria" data-admin-only="1">🛡️ Auditoria</button>
 <button data-view="usuarios" data-admin-only="1">👤 Usuários</button><button data-view="menu">⚙️ Menu</button>
 </nav>
 <main>
@@ -258,6 +258,30 @@ function toggleLoginPass(){
 <div class="card inventory-info"><div><strong>Como funciona</strong><p class="muted">Informe a quantidade encontrada fisicamente. O sistema calcula a diferença e, ao aplicar, ajusta o estoque e registra a movimentação.</p></div><div class="inventory-date"><label>Data do inventário</label><input id="inventarioData" type="date"></div></div>
 <div class="card"><div class="inventory-head"><div><h3>Contagem física</h3><span id="inventarioResumo" class="muted"></span></div><div class="inventory-actions"><select id="inventarioCategoriaImpressao" class="inventory-print-select" aria-label="Categoria para imprimir"><option value="__todas__">Todas as categorias</option></select><button class="secondary" type="button" id="btnImprimirInventario" onclick="imprimirInventario()">🖨️ Imprimir / PDF</button><button class="green" type="button" data-stock-action="1" data-rh-action="1" onclick="aplicarInventario()">✓ Aplicar inventário</button></div></div><div id="inventarioTable" class="inventory-table"></div></div>
 <div class="card"><div class="inventory-head"><div><h3>Histórico de inventários</h3><span id="inventarioHistoricoCount" class="muted"></span></div></div><div id="inventarioHistorico"></div></div></section>
+
+<section id="rnc" class="view">
+<div class="req-page-head"><div><h2 class="cmv-page-title"><span class="page-title-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M6 3h8l4 4v14H6z"/><path d="M14 3v4h4"/><path d="M12 11v4M12 18h.01"/></svg></span>RNC</h2><div class="muted rnc-intro">Achou alguma mercadoria com defeito? Ou problema? Separe o produto e faça sua RNC aqui.</div><div class="req-count"><span id="rncCount">0</span> registrada(s) · <span id="rncAbertas">0</span> aberta(s) · <span id="rncResolvidas">0</span> resolvida(s)</div></div></div>
+<div class="card req-new-card rnc-form">
+<h3>Nova RNC</h3>
+<div class="grid">
+<div><label>Categoria do produto</label><select id="rncCategoria" onchange="rncPopularProdutos()"></select></div>
+<div><label>Produto</label><select id="rncProduto"></select></div>
+<div><label>Tipo de problema</label><select id="rncTipo"><option value="">Selecione o problema...</option><option>Peso ou quantidade divergente</option><option>Embalagem danificada ou violada</option><option>Nota sem boleto</option><option>Nota com erro</option></select></div>
+<div><label>Nº da nota fiscal</label><input id="rncNota" maxlength="40" placeholder="Opcional" inputmode="numeric" autocomplete="off"></div>
+<div class="rnc-span-2"><label>Descrição</label><textarea id="rncDescricao" rows="3" placeholder="Descreva o que foi encontrado..."></textarea></div>
+<div class="rnc-span-2"><label>Foto</label>
+<div class="rnc-foto-box"><label class="rnc-foto-btn"><span class="ui-icon" aria-hidden="true"><svg viewBox="0 0 24 24" focusable="false"><path d="M4 8h3l1.5-2h7L17 8h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg></span><span id="rncFotoBtnTxt">Adicionar foto</span><input id="rncFoto" type="file" accept="image/*" onchange="rncCarregarFoto(this)"></label><div id="rncFotoPreview" class="rnc-foto-preview"></div></div></div>
+</div>
+<div class="actions"><button type="button" class="green" data-stock-action="1" onclick="addRnc()">⚠️ Solicitar RNC</button></div>
+</div>
+<div class="card req-filter-card">
+<input id="rncBusca" placeholder="Buscar número, produto, nota ou descrição..." oninput="renderRnc()">
+<select id="rncStatusFiltro" onchange="renderRnc()"><option value="">Todos os status</option><option value="Aberta">Abertas</option><option value="Resolvida">Resolvidas</option></select>
+<select id="rncTipoFiltro" onchange="renderRnc()"><option value="">Todos os problemas</option><option>Peso ou quantidade divergente</option><option>Embalagem danificada ou violada</option><option>Nota sem boleto</option><option>Nota com erro</option></select>
+<button class="req-clear" type="button" onclick="limparFiltrosRnc()">Limpar filtros</button>
+</div>
+<div id="rncList" class="req-list"></div>
+</section>
 
 <section id="cmv" class="view">
 <div class="page-head"><div><h2 class="cmv-page-title"><span class="page-title-icon nav-icon-cmv" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="3.5" y="3.5" width="17" height="17" rx="2"/><path d="M7 16l3.2-3.6 2.7 2.1L17 9"/><path d="M17 9h-3M17 9v3"/></svg></span>Análise de CMV</h2><div class="muted">Análise do consumo físico por quantidade. Sem valores financeiros nos produtos.</div></div><div class="report-tools"><label>Mês de referência</label><input id="cmvMes" type="month" onchange="renderAnaliseCMV()"></div></div>

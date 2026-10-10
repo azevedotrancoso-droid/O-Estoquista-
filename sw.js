@@ -2,7 +2,7 @@
    - Rede primeiro: sempre busca a versão mais nova dos arquivos do site (atualizações chegam sozinhas).
    - Se estiver sem internet, abre a última versão guardada.
    - Nunca guarda nem intercepta pedidos ao Supabase (dados sempre vêm da nuvem). */
-const VERSAO = 'estoquista-v7';
+const VERSAO = 'estoquista-v9';
 const ARQUIVOS = ['./', 'index.html', 'style.css', 'script.js', 'logo.png', 'logo-mark.png', 'manifest.webmanifest', 'icon-192.png', 'icon-512.png'];
 
 self.addEventListener('install', (e) => {
