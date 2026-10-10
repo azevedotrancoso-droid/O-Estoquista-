@@ -1616,3 +1616,24 @@ header .brand{gap:10px!important}
 .rnc-retorno b{font-weight:800}
 @media(min-width:1100px){.rnc-form .grid{grid-template-columns:repeat(4,minmax(0,1fr))}}
 .rnc-form .rnc-span-2{grid-column:1/-1}
+
+/* ===== Malote NF ===== */
+.malote-nf-box{margin-top:16px;padding:14px;border:1px solid #dbe3ee;border-radius:14px;background:#f8fafc}
+.malote-nf-box h4{margin:0 0 4px;font-size:15px;color:#102a35}
+.malote-draft{margin-top:12px}
+.malote-draft-head{font-size:12px;font-weight:800;color:#5b6a80;text-transform:uppercase;letter-spacing:.04em;margin-bottom:6px}
+.malote-vazio{padding:8px 0;font-size:13px}
+.malote-nf-row{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 12px;margin-top:6px;border:1px solid #e1e7ef;border-radius:12px;background:#fff}
+.malote-nf-info{font-size:14px;line-height:1.35;overflow-wrap:anywhere}
+.malote-nf-info small{display:block;margin-top:2px;color:#747b88;font-size:12.5px}
+.malote-nf-row .trash-btn{flex:0 0 auto;min-height:38px;width:42px;padding:0}
+.malote-item .req-meta .ui-icon{width:15px;height:15px;margin-right:3px;vertical-align:-3px;color:#5b6a80}
+.malote-det{margin-top:12px}
+.malote-det summary{cursor:pointer;font-weight:700;font-size:14px;color:#102a35;padding:6px 0}
+@media(min-width:1100px){.malote-form>.grid{grid-template-columns:repeat(3,minmax(0,1fr))}.malote-nf-box .grid{grid-template-columns:repeat(4,minmax(0,1fr))}}
+#relPrintDoc .mal-assin{display:flex;gap:12mm;margin-top:16mm;break-inside:avoid;page-break-inside:avoid}
+#relPrintDoc .mal-assin-col{flex:1}
+#relPrintDoc .mal-assin-larga{flex:2}
+#relPrintDoc .mal-assin-espaco{height:22mm;display:flex;align-items:flex-end;justify-content:center;padding-bottom:1mm}
+#relPrintDoc .mal-assin-data{font-size:10.5pt;font-weight:700}
+#relPrintDoc .mal-assin-linha{border-top:.3mm solid #1b2536;padding-top:1.5mm;text-align:center;font-size:9pt;color:#4d596b}

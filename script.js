@@ -320,8 +320,20 @@ if(!Array.isArray(db.destilados))db.destilados=[];
 if(!Array.isArray(db.drinks))db.drinks=[];
 if(!Array.isArray(db.categorias))db.categorias=[];
 if(!Array.isArray(db.rnc))db.rnc=[];
+if(!Array.isArray(db.malotes))db.malotes=[];
 db.produtos.forEach(p=>{ if(!Number.isFinite(Number(p.ideal))) p.ideal=Math.max(Number(p.min)||0,(Number(p.min)||0)*2); });
-const CATEGORIAS_PADRAO=["Camara Fria","Estoque Seco","Destilados","Limpeza","Refrigerantes","Cervejas e chopp","Uniformes"];
+/* Remoção definitiva da categoria Uniformes (pedido do usuário): apaga a categoria e os produtos dela.
+   O histórico de movimentações e inventários é mantido, igual à exclusão normal de produto. */
+function removerCategoriaUniformes(){
+  let mudou=false;
+  const removidos=db.produtos.filter(p=>ehCategoriaRH(p&&p.categoria));
+  if(removidos.length){db.produtos=db.produtos.filter(p=>!ehCategoriaRH(p&&p.categoria));mudou=true;}
+  if(Array.isArray(db.categorias)&&db.categorias.some(c=>ehCategoriaRH(c))){db.categorias=db.categorias.filter(c=>!ehCategoriaRH(c));mudou=true;}
+  if(mudou)registrarAuditoria('Produto','Removeu a categoria Uniformes',`${removidos.length} produto(s) removido(s)`);
+  return mudou;
+}
+removerCategoriaUniformes();
+const CATEGORIAS_PADRAO=["Camara Fria","Estoque Seco","Destilados","Limpeza","Refrigerantes","Cervejas e chopp"];
 const categoriasLegadas=[...db.produtos.map(p=>String(p.categoria||"").trim()).filter(Boolean)];
 db.categorias=[...new Set([...CATEGORIAS_PADRAO,...db.categorias.map(x=>String(x||"").trim()).filter(Boolean),...categoriasLegadas])];
 
@@ -509,6 +521,7 @@ function renderSaudacao(){
   box.style.display="flex";
 }
 function render(){
+ if(removerCategoriaUniformes())persist();
  applyPermissions();
  renderSaudacao();
  renderExportacaoMenu();
@@ -525,6 +538,7 @@ function render(){
  renderRequisicoes();
  renderPendencias();
  renderRnc();
+ renderMalote();
  renderMovimentos();
   renderNotas();
   renderComprasEspeciais();
@@ -1781,6 +1795,7 @@ function montarRelatorio(tipo){
       secoes.sort((a,b)=>['CMV por categoria','Desvios do CMV','Desvios por setor','Compras especiais'].indexOf(a.titulo)-['CMV por categoria','Desvios do CMV','Desvios por setor','Compras especiais'].indexOf(b.titulo));
       return {...base,titulo:`Análise de CMV — ${m}/${y}`,arquivo:'cmv_'+mes,meta:[['Mês de referência',`${m}/${y}`]],resumo,secoes};
     }
+    case 'malote':{return maloteRelatorioLista(maloteFiltrados().slice().reverse());}
     case 'rnc':{
       const lista=rncFiltradas().slice().reverse();
       const t=document.getElementById('rncTipoFiltro')?.value||'',st=document.getElementById('rncStatusFiltro')?.value||'';
@@ -1796,7 +1811,7 @@ function montarRelatorio(tipo){
   }
   return null;
 }
-const _EXPORT_ROTULOS={produtos:'Produtos cadastrados',movimentos:'Entradas e saídas',requisicoes:'Requisições',pendencias:'Pendências (empréstimos)',suco:'Suco de laranja (mês)',gelo:'Gelo (mês)',bebidas:'Bebidas: fichas técnicas e destilados',inventario:'Histórico de inventários',cmv:'Análise de CMV (mês)',relatorios:'Relatório mensal completo',rnc:'RNC (não conformidades)',auditoria:'Auditoria'};
+const _EXPORT_ROTULOS={produtos:'Produtos cadastrados',movimentos:'Entradas e saídas',requisicoes:'Requisições',pendencias:'Pendências (empréstimos)',suco:'Suco de laranja (mês)',gelo:'Gelo (mês)',bebidas:'Bebidas: fichas técnicas e destilados',inventario:'Histórico de inventários',cmv:'Análise de CMV (mês)',relatorios:'Relatório mensal completo',rnc:'RNC (não conformidades)',malote:'Malote NF (notas fiscais)',auditoria:'Auditoria'};
 function exportacoesPermitidas(){return Object.keys(_EXPORT_ROTULOS).filter(podeExportar);}
 function podeExportar(tipo){
   if(!_EXPORT_ROTULOS[tipo]||!currentUser())return false;
@@ -1866,7 +1881,7 @@ function _barraExportacao(tipo){
   return d;
 }
 function montarBarrasExportacao(){
-  const mapa=[['produtos','.products-card h3','afterend'],['movimentos','.mov-page-head','afterend'],['requisicoes','.req-page-head','afterend'],['pendencias','.req-page-head','afterend'],['suco','.special-page-head','afterend'],['gelo','.special-page-head','afterend'],['bebidas','.drinks-page-head','afterend'],['inventario','#inventarioHistoricoCount','afterend'],['rnc','.req-page-head','afterend'],['cmv','.page-head','afterend'],['relatorios','.page-head','afterend'],['auditoria','.page-head','afterend']];
+  const mapa=[['produtos','.products-card h3','afterend'],['movimentos','.mov-page-head','afterend'],['requisicoes','.req-page-head','afterend'],['pendencias','.req-page-head','afterend'],['suco','.special-page-head','afterend'],['gelo','.special-page-head','afterend'],['bebidas','.drinks-page-head','afterend'],['inventario','#inventarioHistoricoCount','afterend'],['rnc','.req-page-head','afterend'],['malote','.req-page-head','afterend'],['cmv','.page-head','afterend'],['relatorios','.page-head','afterend'],['auditoria','.page-head','afterend']];
   mapa.forEach(([tipo,sel,pos])=>{
     const secao=document.getElementById(tipo);if(!secao||secao.querySelector('.export-bar'))return;
     const alvo=secao.querySelector(sel);if(!alvo)return;
@@ -2049,6 +2064,167 @@ function rncExportarPDF(i){
   Promise.all([...doc.querySelectorAll('img')].map(im=>im.decode?im.decode().catch(()=>{}):null)).then(()=>window.setTimeout(()=>window.print(),150));
 }
 
+/* ---------- Malote NF ---------- */
+let maloteDraft=[],maloteEditId=null;
+function maloteLista(){if(!Array.isArray(db.malotes))db.malotes=[];return db.malotes;}
+function maloteProximoNumero(){
+  const nums=maloteLista().map(m=>parseInt(String(m.numero||'').replace(/\D/g,''),10)).filter(Number.isFinite);
+  return 'MAL-'+String((nums.length?Math.max(...nums):0)+1).padStart(4,'0');
+}
+function maloteSemanaAtual(){
+  const d=new Date();d.setHours(0,0,0,0);
+  const seg=new Date(d);seg.setDate(d.getDate()-((d.getDay()+6)%7));
+  const dom=new Date(seg);dom.setDate(seg.getDate()+6);
+  const t=new Date(seg);t.setDate(seg.getDate()+3);
+  const jan1=new Date(t.getFullYear(),0,1);
+  const sem=1+Math.floor(((t-jan1)/86400000-3+((jan1.getDay()+6)%7))/7);
+  const f=x=>String(x.getDate()).padStart(2,'0')+'/'+String(x.getMonth()+1).padStart(2,'0');
+  return `Semana ${sem} (${f(seg)} a ${f(dom)})`;
+}
+function maloteResetForm(){
+  maloteEditId=null;maloteDraft=[];
+  document.getElementById('maloteSemana').value=maloteSemanaAtual();
+  document.getElementById('malotePara').value='';
+  document.getElementById('maloteData').value=hojeISO();
+  ['maloteNfNum','maloteNfForn','maloteNfEmissao','maloteNfVenc'].forEach(i=>{document.getElementById(i).value='';});
+  document.getElementById('maloteFormTitulo').textContent='Novo malote';
+  document.getElementById('maloteSalvarBtn').textContent='Salvar malote';
+  document.getElementById('maloteCancelarBtn').style.display='none';
+  maloteRenderDraft();
+}
+function maloteInit(){maloteResetForm();}
+function maloteRenderDraft(){
+  const box=document.getElementById('maloteDraftList');if(!box)return;
+  if(!maloteDraft.length){box.innerHTML='<div class="muted malote-vazio">Nenhuma NF adicionada ainda.</div>';return;}
+  box.innerHTML=`<div class="malote-draft-head">${maloteDraft.length} NF(s) neste malote</div>`+maloteDraft.map((n,i)=>`<div class="malote-nf-row"><div class="malote-nf-info"><b>NF ${esc(n.numero)}</b> · ${esc(n.fornecedor)}<small>Emissão ${esc(n.emissao?formatDateBR(n.emissao):'—')} · Vencimento ${esc(n.vencimento?formatDateBR(n.vencimento):'—')}</small></div><button type="button" class="trash-btn action-btn" onclick="maloteRemoverNf(${i})" aria-label="Remover NF">🗑️</button></div>`).join('');
+  normalizeIcons(box);
+}
+function maloteRemoverNf(i){maloteDraft.splice(i,1);maloteRenderDraft();}
+function maloteAddNf(){
+  const num=document.getElementById('maloteNfNum').value.trim(),forn=document.getElementById('maloteNfForn').value.trim();
+  const em=document.getElementById('maloteNfEmissao').value,ve=document.getElementById('maloteNfVenc').value;
+  if(!num)return alert('Informe o número da NF.')||false;
+  if(!forn)return alert('Informe o fornecedor.')||false;
+  if(em&&ve&&ve<em)return alert('O vencimento não pode ser anterior à data de emissão.')||false;
+  if(maloteDraft.some(n=>n.numero.toLowerCase()===num.toLowerCase()&&n.fornecedor.toLowerCase()===forn.toLowerCase()))return alert('Esta NF deste fornecedor já foi adicionada ao malote.')||false;
+  maloteDraft.push({id:id(),numero:num,fornecedor:forn,emissao:em,vencimento:ve});
+  document.getElementById('maloteNfNum').value='';document.getElementById('maloteNfVenc').value='';
+  maloteRenderDraft();document.getElementById('maloteNfNum').focus();
+  return true;
+}
+function maloteSalvar(){
+  if(!currentUser()||!canOperateStock())return alert('⛔ Seu perfil não tem permissão para criar malotes.');
+  // Se a pessoa preencheu uma NF e esqueceu de tocar em "Adicionar NF", adiciona automaticamente.
+  if(document.getElementById('maloteNfNum').value.trim()){
+    if(maloteAddNf()!==true)return;
+  }
+  const semana=document.getElementById('maloteSemana').value.trim(),para=document.getElementById('malotePara').value.trim(),data=document.getElementById('maloteData').value;
+  if(!semana)return alert('Informe a semana.');
+  if(!para)return alert('Informe para quem é o malote (campo "Para:").');
+  if(!data)return alert('Informe a data.');
+  if(!maloteDraft.length)return alert('Adicione pelo menos uma NF ao malote.');
+  const nfs=maloteDraft.map(n=>({...n}));
+  let m,anterior=null;
+  if(maloteEditId){
+    m=maloteLista().find(x=>String(x.id)===String(maloteEditId));
+    if(!m){maloteResetForm();return alert('Malote não encontrado.');}
+    anterior={...m};
+    Object.assign(m,{semana,para,data,nfs,editadoEm:new Date().toISOString(),editadoPor:usuarioAtualNome()});delete m.assinatura;
+    registrarAuditoria('Malote','Editou malote',`${m.numero} · ${nfs.length} NF(s)`);
+  }else{
+    m={id:id(),numero:maloteProximoNumero(),semana,para,data,nfs,criadoEm:new Date().toISOString(),usuario:usuarioAtualNome()};
+    maloteLista().push(m);
+    registrarAuditoria('Malote','Criou malote',`${m.numero} · ${nfs.length} NF(s) · para ${para}`);
+  }
+  if(!save()){
+    if(anterior){Object.keys(m).forEach(k=>delete m[k]);Object.assign(m,anterior);}else db.malotes=db.malotes.filter(x=>x.id!==m.id);
+    return alert('❌ Não foi possível salvar o malote. Tente novamente.');
+  }
+  const numero=m.numero,idSalvo=m.id,novo=!anterior;
+  maloteResetForm();
+  if(confirm(`✅ ${numero} ${novo?'criado':'atualizado'} com ${nfs.length} NF(s).\n\nDeseja gerar o PDF agora?`))maloteExportarPDF(idSalvo);
+}
+function maloteEditar(i){
+  if(!currentUser()||!canOperateStock())return alert('⛔ Seu perfil não tem permissão para editar malotes.');
+  const m=maloteLista().find(x=>String(x.id)===String(i));if(!m)return;
+  maloteEditId=m.id;maloteDraft=(m.nfs||[]).map(n=>({...n}));
+  document.getElementById('maloteSemana').value=m.semana||'';
+  document.getElementById('malotePara').value=m.para||'';
+  document.getElementById('maloteData').value=m.data||hojeISO();
+  ['maloteNfNum','maloteNfForn','maloteNfEmissao','maloteNfVenc'].forEach(x=>{document.getElementById(x).value='';});
+  document.getElementById('maloteFormTitulo').textContent='Editando '+m.numero;
+  document.getElementById('maloteSalvarBtn').textContent='Salvar alterações';
+  document.getElementById('maloteCancelarBtn').style.display='';
+  maloteRenderDraft();
+  document.querySelector('#malote .malote-form')?.scrollIntoView({behavior:'smooth',block:'start'});
+}
+function maloteCancelarEdicao(){maloteResetForm();}
+function maloteExcluir(i){
+  if(!canDelete())return denyDelete();
+  const m=maloteLista().find(x=>String(x.id)===String(i));if(!m)return;
+  if(!confirm(`Excluir ${m.numero} com ${(m.nfs||[]).length} NF(s)?`))return;
+  registrarAuditoria('Malote','Excluiu malote',`${m.numero} · para ${m.para}`);
+  db.malotes=db.malotes.filter(x=>String(x.id)!==String(i));
+  if(String(maloteEditId)===String(i))maloteResetForm();
+  save();
+}
+function maloteFiltrados(){
+  const q=(document.getElementById('maloteBusca')?.value||'').toLowerCase().trim();
+  return maloteLista().filter(m=>!q||`${m.numero} ${m.semana} ${m.para} ${(m.nfs||[]).map(n=>n.numero+' '+n.fornecedor).join(' ')}`.toLowerCase().includes(q));
+}
+function renderMalote(){
+  const box=document.getElementById('maloteList');if(!box)return;
+  const todos=maloteLista();
+  const c=document.getElementById('maloteCount'),n=document.getElementById('maloteNfCount');
+  if(c)c.textContent=todos.length;if(n)n.textContent=todos.reduce((s,m)=>s+(m.nfs||[]).length,0);
+  const dl=document.getElementById('maloteFornecedores');
+  if(dl){const forn=[...new Set(todos.flatMap(m=>(m.nfs||[]).map(x=>x.fornecedor)).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'pt-BR'));const html=forn.map(f=>`<option value="${esc(f)}"></option>`).join('');if(dl.dataset.sig!==html){dl.innerHTML=html;dl.dataset.sig=html;}}
+  const list=maloteFiltrados().slice().reverse();
+  if(!list.length){box.innerHTML='<div class="req-empty">'+(todos.length?'Nenhum malote encontrado.':'Nenhum malote criado ainda.')+'</div>';return;}
+  const podeOperar=!!currentUser()&&canOperateStock();
+  box.innerHTML=list.map(m=>{
+    const nfs=m.nfs||[];
+    return `<div class="req-card malote-item"><div class="req-card-top"><div><div class="req-code">${esc(m.numero)}</div><div class="req-meta">📅 ${esc(formatDateBR(m.data))} · ${esc(m.semana)}<br>👤 Para: ${esc(m.para)}</div></div><span class="req-badge status-separando">${nfs.length} NF(s)</span></div><details class="malote-det"><summary>${nfs.length} NF(s) neste malote</summary>${nfs.map(x=>`<div class="malote-nf-row"><div class="malote-nf-info"><b>NF ${esc(x.numero)}</b> · ${esc(x.fornecedor)}<small>Emissão ${esc(x.emissao?formatDateBR(x.emissao):'—')} · Vencimento ${esc(x.vencimento?formatDateBR(x.vencimento):'—')}</small></div></div>`).join('')}</details><div class="pend-actions">${podeOperar?`<button class="secondary" type="button" onclick="maloteEditar('${esc(m.id)}')">✏️ Editar</button>`:''}<button class="secondary" type="button" onclick="maloteExportarPDF('${esc(m.id)}')">📄 PDF</button><button class="secondary" type="button" onclick="maloteExportarExcel('${esc(m.id)}')">📊 Excel</button>${canDelete()?`<button class="danger" type="button" onclick="maloteExcluir('${esc(m.id)}')">🗑️ Excluir</button>`:''}</div></div>`;
+  }).join('');
+  normalizeIcons(box);
+}
+function maloteRelatorioLista(lista){
+  const linhas=[];
+  lista.forEach(m=>(m.nfs||[]).forEach(x=>linhas.push([m.numero,m.semana,m.para,m.data,x.numero,x.fornecedor,x.emissao||'',x.vencimento||''])));
+  return {meta:[],titulo:'Malote NF — notas fiscais enviadas',arquivo:'malote_nf',
+    resumo:[['Malotes',lista.length,'num'],['NFs',linhas.length,'num']],
+    secoes:[{nome:'Malote NF',titulo:'Notas fiscais por malote',colunas:[{t:'Malote',tipo:'texto'},{t:'Semana',tipo:'texto',larg:28},{t:'Para',tipo:'texto',larg:24},{t:'Data',tipo:'data'},{t:'Nº da NF',tipo:'texto'},{t:'Fornecedor',tipo:'texto',larg:34},{t:'Emissão',tipo:'data'},{t:'Vencimento',tipo:'data'}],linhas}]};
+}
+function maloteExportarExcel(i){
+  const m=maloteLista().find(x=>String(x.id)===String(i));if(!m)return;
+  try{
+    const nfs=m.nfs||[];
+    exportarExcel({meta:[],titulo:'Malote '+m.numero,arquivo:'malote_'+m.numero,
+      resumo:[['Semana',m.semana||'','texto'],['Para:',m.para||'','texto'],['Data',m.data||'','data'],['Total de NFs',nfs.length,'num']],
+      secoes:[{nome:'Malote',titulo:'Malote '+m.numero,colunas:[{t:'Nº da NF',tipo:'texto'},{t:'Fornecedor',tipo:'texto',larg:34},{t:'Data de emissão',tipo:'data'},{t:'Vencimento',tipo:'data'}],
+        linhas:nfs.map(x=>[x.numero,x.fornecedor,x.emissao||'',x.vencimento||''])}]});
+  }catch(e){console.error('Falha ao exportar malote',e);alert('❌ Não foi possível gerar o arquivo.');}
+}
+function maloteExportarPDF(i){
+  const m=maloteLista().find(x=>String(x.id)===String(i));if(!m)return;
+  document.getElementById('relPrintDoc')?.remove();document.getElementById('relPrintPageStyle')?.remove();
+  const nfs=m.nfs||[],emitido=_agoraTxt();
+  const meta=[['Semana',m.semana||'—'],['Para:',m.para||'—'],['Data',formatDateBR(m.data)],['Total de NFs',String(nfs.length)],['Emitido em',emitido]];
+  const tabela=`<table class="rel-table"><thead><tr><th class="rel-c">#</th><th class="rel-l">Nº da NF</th><th class="rel-l">Fornecedor</th><th class="rel-c">Data de emissão</th><th class="rel-c">Vencimento</th></tr></thead><tbody>${nfs.map((x,k)=>`<tr><td class="rel-c">${k+1}</td><td class="rel-l">${esc(x.numero)}</td><td class="rel-l">${esc(x.fornecedor)}</td><td class="rel-c">${esc(x.emissao?formatDateBR(x.emissao):'')}</td><td class="rel-c">${esc(x.vencimento?formatDateBR(x.vencimento):'')}</td></tr>`).join('')}</tbody></table>`;
+  const assin=`<div class="mal-assin"><div class="mal-assin-col"><div class="mal-assin-espaco mal-assin-data">${esc(formatDateBR(m.data))}</div><div class="mal-assin-linha">Data</div></div><div class="mal-assin-col mal-assin-larga"><div class="mal-assin-espaco"></div><div class="mal-assin-linha">Assinatura</div></div></div>`;
+  const doc=document.createElement('div');doc.id='relPrintDoc';
+  doc.innerHTML=`<div class="rel-page"><div class="rel-top"><span class="rel-brand">O ESTOQUISTA</span><span class="rel-doc">Malote de notas fiscais</span></div><div class="rel-title">${esc(m.numero)}</div><div class="rel-meta">${meta.map(([a,b])=>`<div><span>${esc(a)}</span><b>${esc(b)}</b></div>`).join('')}</div><div class="rel-sec">Notas fiscais</div>${tabela}${assin}</div><div class="rel-foot">Documento gerado por O Estoquista em ${esc(emitido)}</div>`;
+  document.body.appendChild(doc);
+  const est=document.createElement('style');est.id='relPrintPageStyle';
+  est.textContent='@page{size:A4 portrait;margin:12mm 10mm 16mm}';document.head.appendChild(est);
+  const tituloOriginal=document.title;document.title=`${m.numero} - Malote NF`;
+  document.body.classList.add('imprimindo-rel');
+  let limpo=false;
+  const limpar=()=>{if(limpo)return;limpo=true;document.body.classList.remove('imprimindo-rel');doc.remove();est.remove();document.title=tituloOriginal;window.removeEventListener('afterprint',limpar);};
+  window.addEventListener('afterprint',limpar);window.setTimeout(limpar,300000);
+  Promise.all([...doc.querySelectorAll('img')].map(im=>im.decode?im.decode().catch(()=>{}):null)).then(()=>window.setTimeout(()=>window.print(),150));
+}
+
 /* ---------- Aplicativo instalável (PWA) ---------- */
 let _promptInstalar=null;
 function appJaInstalado(){return (window.matchMedia&&window.matchMedia('(display-mode: standalone)').matches)||window.navigator.standalone===true;}
@@ -2093,7 +2269,7 @@ setInterval(renderSaudacao,60000);
 console.info("O Estoquista iniciado: dados locais carregados com sucesso.");
 if(document.getElementById("mData")) document.getElementById("mData").value=new Date().toISOString().slice(0,10);
 if(document.getElementById("eData")) document.getElementById("eData").value=hojeISO();
-updateEmprestimoUnit();renderEmprestimoDraft();
+updateEmprestimoUnit();renderEmprestimoDraft();maloteInit();
 if(document.getElementById("inventarioData")) document.getElementById("inventarioData").value=hojeISO();
 if(document.getElementById("relatorioMes")) document.getElementById("relatorioMes").value=mesAtualISO();
 
