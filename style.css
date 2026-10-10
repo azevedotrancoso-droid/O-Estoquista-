@@ -1568,3 +1568,18 @@ header .brand{gap:10px!important}
 @media(max-width:650px){
   header .brand-icon{width:23px!important;height:27px!important;flex:0 0 23px!important}
 }
+
+/* Alertas de estoque — lista organizada e rolável (início) */
+.alert-panel{padding:0!important;border:1px solid var(--line,#e5e7eb)!important;border-left-width:1px!important;border-radius:16px!important;overflow:hidden;min-height:0!important}
+.alert-panel-head{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:16px 18px;border-bottom:1px solid #e5e7eb}
+.alert-panel-head h3{margin:0!important;font-size:17px}
+.alert-count{background:#fde8e8;color:#c62828;font-weight:800;font-size:14px;line-height:1;padding:6px 12px;border-radius:999px}
+.alert-count.is-zero{background:#e8eef0;color:#5b6a73}
+.alert-list{max-height:340px;overflow-y:auto;overscroll-behavior:contain;-webkit-overflow-scrolling:touch;padding:2px 18px 6px;scrollbar-width:thin;scrollbar-color:#bfc5cc transparent}
+.alert-list::-webkit-scrollbar{width:6px}.alert-list::-webkit-scrollbar-thumb{background:#bfc5cc;border-radius:6px}.alert-list::-webkit-scrollbar-track{background:transparent}
+.alert-list .stock-alert{background:transparent!important;border:0!important;border-bottom:1px solid #e9ecef!important;border-radius:0!important;margin:0!important;padding:13px 0!important;color:var(--text)!important;font-weight:400}
+.alert-list .stock-alert:last-child{border-bottom:0!important}
+.alert-list .alert-name{font-weight:700;font-size:15px;text-transform:uppercase;letter-spacing:.1px}
+.alert-list .stock-alert small{display:block;margin-top:4px;color:var(--muted);font-weight:400;font-size:13px}
+.alert-list .stock-alert small b{color:#c62828;font-weight:700}.alert-list .stock-alert small b+b,.alert-list .stock-alert small b:last-child{color:var(--text)}
+.alert-list .stock-ok{background:transparent!important;border:0!important;padding:18px 0!important}
