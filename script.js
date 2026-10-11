@@ -532,7 +532,7 @@ function render(){
  const baixoCount=document.getElementById("baixoCount"); if(baixoCount){baixoCount.textContent=low.length; baixoCount.classList.toggle("is-zero",!low.length);}
  const opts='<option value="">Selecione...</option>'+db.produtos.map(p=>`<option value="${p.id}">${esc(p.nome)} (${p.estoque} ${p.un})</option>`).join("");
  const selectedProd=rProd.value; rProd.innerHTML=opts; if(mCategoria){ const cats=[...new Set((db.produtos||[]).map(p=>String(p.categoria||"Sem categoria").trim()||"Sem categoria"))].sort((a,b)=>a.localeCompare(b,"pt-BR")); const selCat=mCategoria.value; mCategoria.innerHTML='<option value="">Todas as categorias</option>'+cats.map(c=>`<option value="${esc(c)}">${esc(c)}</option>`).join(""); if(cats.includes(selCat))mCategoria.value=selCat; } mProd.innerHTML=opts; if(mCategoria?.value)filtrarProdutosMovimento();
- const selectedEmp=eProd?.value; if(eProd){eProd.innerHTML=opts; if(selectedEmp && db.produtos.some(p=>String(p.id)===String(selectedEmp)))eProd.value=selectedEmp;} updateEmprestimoUnit(); if(selectedProd && db.produtos.some(p=>String(p.id)===String(selectedProd))){rProd.value=selectedProd;} updateReqUnit();
+ const selectedEmp=eProd?.value; if(eProd){eProd.innerHTML=opts; if(selectedEmp && db.produtos.some(p=>String(p.id)===String(selectedEmp)))eProd.value=selectedEmp;} updateEmprestimoUnit(); if(selectedProd && db.produtos.some(p=>String(p.id)===String(selectedProd))){rProd.value=selectedProd;} updateReqUnit(); popularCategoriasReqEmp();
  renderCategoriasUI();
  renderProdutos();
  renderRequisicoes();
@@ -946,6 +946,27 @@ function renderMovimentos(){
  if(!box)return;
  box.innerHTML=lista.length?`<div class="mov-list">${lista.slice().reverse().map(m=>{const entrada=m.tipo==="entrada";return `<div class="mov-card ${entrada?'mov-entry':'mov-exit'}"><div class="mov-card-top"><div><div class="mov-product">${esc(m.prod)}</div><div class="mov-meta">${esc(formatDateBR(m.data))} · ${esc(m.un||'un.')}</div></div><span class="mov-badge ${entrada?'mov-badge-entry':'mov-badge-exit'}">${entrada?'↑ Entrada':'↓ Saída'}</span></div><div class="mov-details"><div class="mov-detail">Quantidade<strong>${m.qtd} ${esc(m.un||'')}</strong></div><div class="mov-detail">Motivo<strong>${esc(m.motivo||'Sem motivo informado')}</strong></div><div class="mov-detail">Ação<strong>${m.reqId||m.origem==="requisicao"?'🔒 Requisição entregue':(canDelete()?`<button class="mov-delete" onclick="delMov('${m.id}')">Apagar</button>`:'🔒 Sem permissão')}</strong></div></div></div>`}).join('')}</div>`:"<div class='mov-empty'>Nenhuma movimentação encontrada para este filtro.</div>";
 }
+function popularCategoriasReqEmp(){
+ const cats=[...new Set((db.produtos||[]).map(p=>String(p.categoria||"Sem categoria").trim()||"Sem categoria"))].sort((a,b)=>a.localeCompare(b,"pt-BR"));
+ ["rCategoria","eCategoria"].forEach(id=>{
+  const cs=document.getElementById(id); if(!cs)return;
+  const atual=cs.value;
+  cs.innerHTML='<option value="">Todas as categorias</option>'+cats.map(c=>`<option value="${esc(c)}">${esc(c)}</option>`).join("");
+  if(cats.includes(atual))cs.value=atual;
+ });
+ filtrarProdutosReq(); filtrarProdutosEmp();
+}
+function filtrarProdutosPorCategoria(catId,prodId){
+ const categoria=document.getElementById(catId)?.value||"";
+ const select=document.getElementById(prodId);
+ if(!select)return;
+ const atual=select.value;
+ const produtos=(db.produtos||[]).filter(p=>!categoria || String(p.categoria||"Sem categoria").trim()===categoria);
+ select.innerHTML='<option value="">Selecione...</option>'+produtos.map(p=>`<option value="${p.id}">${esc(p.nome)} (${p.estoque} ${p.un})</option>`).join("");
+ if(produtos.some(p=>String(p.id)===String(atual)))select.value=atual;
+}
+function filtrarProdutosReq(){filtrarProdutosPorCategoria("rCategoria","rProd");updateReqUnit();}
+function filtrarProdutosEmp(){filtrarProdutosPorCategoria("eCategoria","eProd");updateEmprestimoUnit();}
 function filtrarProdutosMovimento(){
  const categoria=document.getElementById("mCategoria")?.value||"";
  const select=document.getElementById("mProd");

@@ -128,7 +128,7 @@ function toggleLoginPass(){
 <h3>Nova requisição</h3><div class="grid">
 <div><label>Setor</label><select id="rSetor"><option>Bar</option><option>Cozinha</option></select></div>
 <div><label>Prioridade</label><select id="rPrioridade"><option>Normal</option><option>Alta</option><option>Urgente</option></select></div>
-<div><label>Produto</label><select id="rProd"></select></div><div><label>Quantidade</label><input id="rQtd" type="number" min="0.001" step="any" value="1" inputmode="decimal"></div>
+<div><label>Categoria</label><select id="rCategoria" onchange="filtrarProdutosReq()"></select></div><div><label>Produto</label><select id="rProd"></select></div><div><label>Quantidade</label><input id="rQtd" type="number" min="0.001" step="any" value="1" inputmode="decimal"></div>
 <div><label>Unidade de medida</label><input id="rUn" type="text" readonly placeholder="Automática pelo produto"></div><div><label>Solicitante</label><input id="rSol" placeholder="Nome"></div>
 </div><div class="actions"><button type="button" data-stock-action="1" onclick="addReqItem()">Adicionar item</button><button type="button" class="green" data-stock-action="1" onclick="addReq()">Criar requisição</button></div><div id="reqDraftItems" class="req-items-box"></div></div>
 </section>
@@ -145,7 +145,7 @@ function toggleLoginPass(){
 <h3>Novo empréstimo</h3><div class="grid">
 <div><label>Para quem está sendo emprestado</label><input id="ePessoa" placeholder="Nome da pessoa / setor"></div>
 <div><label>Data do empréstimo</label><input id="eData" type="date"></div>
-<div><label>Produto</label><select id="eProd"></select></div><div><label>Quantidade</label><input id="eQtd" type="number" min="0.001" step="any" value="1" inputmode="decimal"></div>
+<div><label>Categoria</label><select id="eCategoria" onchange="filtrarProdutosEmp()"></select></div><div><label>Produto</label><select id="eProd"></select></div><div><label>Quantidade</label><input id="eQtd" type="number" min="0.001" step="any" value="1" inputmode="decimal"></div>
 <div><label>Unidade de medida</label><input id="eUn" type="text" readonly placeholder="Automática pelo produto"></div>
 <div><label>Observação</label><input id="eObs" placeholder="Opcional"></div>
 </div><div class="actions"><button type="button" data-stock-action="1" onclick="addEmprestimoItem()">Adicionar item</button><button type="button" class="green" data-stock-action="1" onclick="addEmprestimo()">Registrar empréstimo</button></div><div id="emprestimoDraftItems" class="req-items-box"></div></div>
