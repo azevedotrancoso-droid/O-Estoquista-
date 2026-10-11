@@ -1637,3 +1637,6 @@ header .brand{gap:10px!important}
 #relPrintDoc .mal-assin-espaco{height:22mm;display:flex;align-items:flex-end;justify-content:center;padding-bottom:1mm}
 #relPrintDoc .mal-assin-data{font-size:10.5pt;font-weight:700}
 #relPrintDoc .mal-assin-linha{border-top:.3mm solid #1b2536;padding-top:1.5mm;text-align:center;font-size:9pt;color:#4d596b}
+
+/* Excluir categoria (mesma caixa da criação, com a lixeira padrão do site) */
+.category-delete-box{margin-top:12px;padding-top:12px}

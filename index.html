@@ -100,6 +100,7 @@ function toggleLoginPass(){
 <div><label>Estoque mínimo</label><input id="pMin" type="number" min="0" step="any" value="0" inputmode="decimal"></div><div><label>Estoque ideal</label><input id="pIdeal" type="number" min="0" step="any" value="0" inputmode="decimal"></div>
 </div><div class="actions"><button data-stock-action="1" data-rh-action="1" onclick="addProduto()">Adicionar produto</button></div>
 <div class="category-create-box"><div><label>Nova categoria</label><input id="novaCategoria" maxlength="60" placeholder="Ex.: Congelados, Hortifruti..."></div><button type="button" data-stock-action="1" onclick="criarCategoria()">＋ Criar categoria</button></div>
+<div id="categoriaExcluirBox" class="category-create-box category-delete-box"><div><label>Excluir categoria</label><select id="excluirCategoriaSel"><option value="">Selecione a categoria</option></select></div><button type="button" class="trash-btn action-btn" onclick="excluirCategoria()" title="Excluir categoria" aria-label="Excluir categoria"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M19 6l-1 15H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/></svg>Excluir categoria</button></div>
 <p class="muted category-help">As categorias criadas ficam salvas no dispositivo e passam a aparecer automaticamente no cadastro, filtros e inventário.</p>
 </div>
 <div class="card products-card">

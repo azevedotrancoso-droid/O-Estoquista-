@@ -319,6 +319,7 @@ if(!Array.isArray(db.inventarios))db.inventarios=[];
 if(!Array.isArray(db.destilados))db.destilados=[];
 if(!Array.isArray(db.drinks))db.drinks=[];
 if(!Array.isArray(db.categorias))db.categorias=[];
+if(!Array.isArray(db.categoriasExcluidas))db.categoriasExcluidas=[];
 if(!Array.isArray(db.rnc))db.rnc=[];
 if(!Array.isArray(db.malotes))db.malotes=[];
 db.produtos.forEach(p=>{ if(!Number.isFinite(Number(p.ideal))) p.ideal=Math.max(Number(p.min)||0,(Number(p.min)||0)*2); });
@@ -335,7 +336,7 @@ function removerCategoriaUniformes(){
 removerCategoriaUniformes();
 const CATEGORIAS_PADRAO=["Camara Fria","Estoque Seco","Destilados","Limpeza","Refrigerantes","Cervejas e chopp"];
 const categoriasLegadas=[...db.produtos.map(p=>String(p.categoria||"").trim()).filter(Boolean)];
-db.categorias=[...new Set([...CATEGORIAS_PADRAO,...db.categorias.map(x=>String(x||"").trim()).filter(Boolean),...categoriasLegadas])];
+db.categorias=[...new Set([...CATEGORIAS_PADRAO,...db.categorias.map(x=>String(x||"").trim()).filter(Boolean),...categoriasLegadas])].filter(c=>!categoriaExcluida(c)||categoriaEmUso(c));
 
 // Referências explícitas aos elementos da interface. Isso evita depender
 // do comportamento implícito do navegador de transformar IDs em variáveis globais.
@@ -562,8 +563,9 @@ function now(){return new Date().toLocaleString("pt-BR")}
 function normalizarCategoriasProdutos(){
   if(!Array.isArray(db.produtos)) db.produtos=[];
   if(!Array.isArray(db.categorias)) db.categorias=[];
+  if(!Array.isArray(db.categoriasExcluidas)) db.categoriasExcluidas=[];
   db.produtos.forEach(p=>{ if(typeof p.categoria!=="string") p.categoria=""; });
-  db.categorias=[...new Set([...CATEGORIAS_PADRAO,...db.categorias.map(x=>String(x||"").trim()).filter(Boolean),...db.produtos.map(p=>String(p.categoria||"").trim()).filter(Boolean)])];
+  db.categorias=[...new Set([...CATEGORIAS_PADRAO,...db.categorias.map(x=>String(x||"").trim()).filter(Boolean),...db.produtos.map(p=>String(p.categoria||"").trim()).filter(Boolean)])].filter(c=>!categoriaExcluida(c)||categoriaEmUso(c));
 }
 function renderCategoriasUI(){
   normalizarCategoriasProdutos();
@@ -577,6 +579,26 @@ function renderCategoriasUI(){
   if(pSel && cats.includes(atualP))pSel.value=atualP;
   if(pSel){if(isRH()){pSel.value=cats[0]||'';pSel.disabled=true;}else{pSel.disabled=false;}}
   if(filtro && cats.includes(atualF))filtro.value=atualF;
+  const exSel=document.getElementById('excluirCategoriaSel'), exBox=document.getElementById('categoriaExcluirBox');
+  if(exBox)exBox.style.display=canDelete()?'':'none';
+  if(exSel){const atualE=exSel.value; exSel.innerHTML='<option value="">Selecione a categoria</option>'+db.categorias.slice().sort((a,b)=>a.localeCompare(b,'pt-BR')).map(c=>`<option value="${esc(c)}">${esc(c)}</option>`).join(''); if(db.categorias.includes(atualE))exSel.value=atualE;}
+}
+function categoriaExcluida(c){const k=String(c||'').trim().toLowerCase();return (db.categoriasExcluidas||[]).some(x=>String(x||'').trim().toLowerCase()===k);}
+function categoriaEmUso(c){const k=String(c||'').trim().toLowerCase();return (db.produtos||[]).some(p=>String(p&&p.categoria||'').trim().toLowerCase()===k);}
+function excluirCategoria(){
+  if(!canDelete())return denyDelete();
+  const sel=document.getElementById('excluirCategoriaSel');
+  const nome=(sel?.value||'').trim();
+  if(!nome)return alert('Selecione a categoria que deseja excluir.');
+  normalizarCategoriasProdutos();
+  const emUso=db.produtos.filter(p=>String(p.categoria||'').trim().toLowerCase()===nome.toLowerCase());
+  if(emUso.length)return alert(`Não é possível excluir a categoria "${nome}": ela está sendo usada por ${emUso.length} produto(s). Exclua esses produtos antes de excluir a categoria.`);
+  if(!confirm(`Excluir a categoria "${nome}"?`))return;
+  db.categorias=db.categorias.filter(c=>String(c).trim().toLowerCase()!==nome.toLowerCase());
+  if(!categoriaExcluida(nome))db.categoriasExcluidas.push(nome);
+  registrarAuditoria('Produto','Excluiu categoria',`Categoria: ${nome}`);
+  save();
+  renderProdutos();
 }
 function criarCategoria(){
   if(!canEditStock())return denyOperate();
@@ -586,6 +608,7 @@ function criarCategoria(){
   normalizarCategoriasProdutos();
   if(db.categorias.some(c=>c.toLowerCase()===nome.toLowerCase()))return alert('Essa categoria já existe.');
   db.categorias.push(nome);
+  db.categoriasExcluidas=(db.categoriasExcluidas||[]).filter(x=>String(x||'').trim().toLowerCase()!==nome.toLowerCase());
   registrarAuditoria('Produto','Criou categoria',`Categoria: ${nome}`);
   if(input)input.value='';
   save();
