@@ -139,12 +139,14 @@ function toggleLoginPass(){
 <div class="card req-filter-card">
 <input id="pendBusca" placeholder="Buscar pessoa, número ou produto..." oninput="renderPendencias()">
 <select id="pendStatusFiltro" onchange="renderPendencias()"><option value="">Todos os status</option><option value="Pendente">Pendentes</option><option value="Pago">Pagos</option></select>
+<select id="pendTipoFiltro" onchange="renderPendencias()"><option value="">Emprestei e peguei</option><option value="cedido">Emprestei (saiu do estoque)</option><option value="tomado">Peguei emprestado (entrou no estoque)</option></select>
 <button class="req-clear" type="button" onclick="limparFiltrosPendencias()">Limpar filtros</button>
 </div>
 <div id="pendTable" class="req-list"></div>
 <div class="card req-new-card">
 <h3>Novo empréstimo</h3><div class="grid">
-<div><label>Para quem está sendo emprestado</label><input id="ePessoa" placeholder="Nome da pessoa / setor"></div>
+<div><label>Tipo de empréstimo</label><select id="eTipo" onchange="atualizarTipoEmprestimo()"><option value="cedido">Emprestei (sai do meu estoque)</option><option value="tomado">Peguei emprestado (entra no meu estoque)</option></select></div>
+<div><label id="ePessoaLabel">Para quem está sendo emprestado</label><input id="ePessoa" placeholder="Nome da pessoa / setor"></div>
 <div><label>Data do empréstimo</label><input id="eData" type="date"></div>
 <div><label>Categoria</label><select id="eCategoria" onchange="filtrarProdutosEmp()"></select></div><div><label>Produto</label><select id="eProd"></select></div><div><label>Quantidade</label><input id="eQtd" type="number" min="0.001" step="any" value="1" inputmode="decimal"></div>
 <div><label>Unidade de medida</label><input id="eUn" type="text" readonly placeholder="Automática pelo produto"></div>
@@ -266,8 +268,9 @@ function toggleLoginPass(){
 <h3>Nova RNC</h3>
 <div class="grid">
 <div><label>Categoria do produto</label><select id="rncCategoria" onchange="rncPopularProdutos()"></select></div>
-<div><label>Produto</label><select id="rncProduto"></select></div>
+<div><label>Produto</label><select id="rncProduto" onchange="rncAtualizarUn()"></select></div>
 <div><label>Quantidade com problema</label><input id="rncQtd" type="number" min="0.001" step="any" placeholder="Ex.: 3" inputmode="decimal"></div>
+<div><label>Unidade de medida</label><input id="rncUn" readonly tabindex="-1" placeholder="Selecione o produto" aria-readonly="true"></div>
 <div><label>Tipo de problema</label><select id="rncTipo"><option value="">Selecione o problema...</option><option>Peso ou quantidade divergente</option><option>Embalagem danificada ou violada</option><option>Nota sem boleto</option><option>Nota com erro</option></select></div>
 <div><label>Nº da nota fiscal</label><input id="rncNota" maxlength="40" placeholder="Opcional" inputmode="numeric" autocomplete="off"></div>
 <div class="rnc-span-2"><label>Descrição</label><textarea id="rncDescricao" rows="3" placeholder="Descreva o que foi encontrado..."></textarea></div>

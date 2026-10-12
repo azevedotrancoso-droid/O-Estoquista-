@@ -727,31 +727,39 @@ let emprestimoItens=[];
 function updateEmprestimoUnit(){const p=db.produtos.find(x=>String(x.id)===String(eProd?.value));if(eUn)eUn.value=p?p.un:"";}
 if(eProd)eProd.addEventListener("change",updateEmprestimoUnit);
 function emprestimoNextNumber(){const nums=db.emprestimos.map(x=>parseInt(String(x.numero||'').replace(/\D/g,''),10)).filter(Number.isFinite);const base=nums.length?Math.max(...nums):db.emprestimos.length;return 'EMP-'+String(base+1).padStart(4,'0');}
+function empTipoAtual(){return document.getElementById('eTipo')?.value==='tomado'?'tomado':'cedido';}
+function atualizarTipoEmprestimo(){const l=document.getElementById('ePessoaLabel');if(l)l.textContent=empTipoAtual()==='tomado'?'De quem você está pegando emprestado':'Para quem está sendo emprestado';}
 function addEmprestimoItem(){
  if(!canEditStock())return denyOperate();
  const p=db.produtos.find(x=>String(x.id)===String(eProd?.value)),q=Number(document.getElementById('eQtd')?.value||0);
  if(!p||!Number.isFinite(q)||q<=0)return alert('Selecione um produto e informe uma quantidade válida.');
- if(Number(p.estoque)<q)return alert(`Estoque insuficiente. Disponível: ${p.estoque} ${p.un}.`);
+ const cedido=empTipoAtual()==='cedido';
+ if(cedido&&Number(p.estoque)<q)return alert(`Estoque insuficiente. Disponível: ${p.estoque} ${p.un}.`);
  const existente=emprestimoItens.find(x=>String(x.prodId)===String(p.id));
- if(existente){if(p.estoque<existente.qtd+q)return alert(`Estoque insuficiente. Disponível: ${p.estoque} ${p.un}.`);existente.qtd=arred(existente.qtd+q);}else emprestimoItens.push({prodId:p.id,prod:p.nome,qtd:q,un:p.un});
+ if(existente){if(cedido&&p.estoque<existente.qtd+q)return alert(`Estoque insuficiente. Disponível: ${p.estoque} ${p.un}.`);existente.qtd=arred(existente.qtd+q);}else emprestimoItens.push({prodId:p.id,prod:p.nome,qtd:q,un:p.un});
  document.getElementById('eQtd').value=1;renderEmprestimoDraft();
 }
 function renderEmprestimoDraft(){const box=document.getElementById('emprestimoDraftItems');if(!box)return;if(!emprestimoItens.length){box.innerHTML='<p class="muted">Nenhum produto adicionado ao empréstimo.</p>';return;}box.innerHTML=emprestimoItens.map((it,i)=>`<div class="req-draft-item"><div><b>${esc(it.prod)}</b><small>${it.qtd} ${esc(it.un)}</small></div><button class="req-draft-remove" type="button" onclick="emprestimoItens.splice(${i},1);renderEmprestimoDraft()">Remover</button></div>`).join('');}
 function addEmprestimo(){
  if(!canEditStock())return denyOperate();
  const pessoa=(document.getElementById('ePessoa')?.value||'').trim(),data=document.getElementById('eData')?.value||hojeISO(),obs=(document.getElementById('eObs')?.value||'').trim();
- if(!pessoa)return alert('Informe para quem o produto está sendo emprestado.');
+ const tomado=empTipoAtual()==='tomado';
+ if(!pessoa)return alert(tomado?'Informe de quem o produto está sendo pego emprestado.':'Informe para quem o produto está sendo emprestado.');
  if(!emprestimoItens.length)return alert('Adicione pelo menos um produto ao empréstimo.');
- for(const it of emprestimoItens){const p=db.produtos.find(x=>String(x.id)===String(it.prodId));if(!p||Number(p.estoque)<Number(it.qtd))return alert(`Estoque insuficiente para ${it.prod}.`);}
- const emp={id:id(),numero:emprestimoNextNumber(),data,dataCriado:now(),pessoa,obs,status:'Pendente',itens:emprestimoItens.map(x=>({...x}))};
- emp.itens.forEach(it=>{const p=db.produtos.find(x=>String(x.id)===String(it.prodId));p.estoque=arred(p.estoque-Number(it.qtd));db.mov.push({id:id(),data:emp.data,prodId:p.id,prod:p.nome,tipo:'saida',qtd:Number(it.qtd),un:p.un,motivo:`Empréstimo ${emp.numero} · ${emp.pessoa}`,origem:'emprestimo',emprestimoId:emp.id});});
- db.emprestimos.unshift(emp);registrarAuditoria('Empréstimo','Registrou empréstimo',`${emp.numero} · Para: ${emp.pessoa} · ${emp.itens.length} item(s)`);emprestimoItens=[];document.getElementById('ePessoa').value='';document.getElementById('eObs').value='';document.getElementById('eQtd').value=1;renderEmprestimoDraft();save();
+ for(const it of emprestimoItens){const p=db.produtos.find(x=>String(x.id)===String(it.prodId));if(!p)return alert(`Produto não encontrado: ${it.prod}.`);if(!tomado&&Number(p.estoque)<Number(it.qtd))return alert(`Estoque insuficiente para ${it.prod}.`);}
+ const emp={id:id(),numero:emprestimoNextNumber(),tipo:tomado?'tomado':'cedido',data,dataCriado:now(),pessoa,obs,status:'Pendente',itens:emprestimoItens.map(x=>({...x}))};
+ emp.itens.forEach(it=>{const p=db.produtos.find(x=>String(x.id)===String(it.prodId));p.estoque=arred(p.estoque+(tomado?1:-1)*Number(it.qtd));db.mov.push({id:id(),data:emp.data,prodId:p.id,prod:p.nome,tipo:tomado?'entrada':'saida',qtd:Number(it.qtd),un:p.un,motivo:tomado?`Empréstimo recebido ${emp.numero} · ${emp.pessoa}`:`Empréstimo ${emp.numero} · ${emp.pessoa}`,origem:tomado?'emprestimo_recebido':'emprestimo',emprestimoId:emp.id});});
+ db.emprestimos.unshift(emp);registrarAuditoria('Empréstimo',tomado?'Registrou empréstimo recebido':'Registrou empréstimo',`${emp.numero} · ${tomado?'De':'Para'}: ${emp.pessoa} · ${emp.itens.length} item(s)`);emprestimoItens=[];document.getElementById('ePessoa').value='';document.getElementById('eObs').value='';document.getElementById('eQtd').value=1;renderEmprestimoDraft();save();
 }
 function renderPendencias(){
- const box=document.getElementById('pendTable');if(!box)return;const busca=(document.getElementById('pendBusca')?.value||'').toLowerCase().trim(),status=document.getElementById('pendStatusFiltro')?.value||'';const all=(db.emprestimos||[]).slice().reverse();const list=all.filter(x=>(!status||x.status===status)&&(!busca||`${x.numero} ${x.pessoa} ${x.obs||''} ${(x.itens||[]).map(i=>i.prod).join(' ')}`.toLowerCase().includes(busca)));const c=document.getElementById('pendCount');if(c)c.textContent=all.length;if(!list.length){box.innerHTML='<div class="req-empty">Nenhum empréstimo encontrado.</div>';return;}box.innerHTML=list.map(x=>{const pago=x.status==='Pago';return `<div class="req-card pend-card ${pago?'pend-paid':''}"><div class="req-card-top"><div><div class="req-code">${esc(x.numero)}</div><div class="req-meta">👤 ${esc(x.pessoa)} · ${esc(formatDateBR(x.data))}</div></div><span class="req-badge ${pago?'status-entregue':'status-pendente'}">${pago?'Pago':'Pendente'}</span></div><div class="pend-items">${(x.itens||[]).map(i=>`<span>${esc(i.prod)} · ${i.qtd} ${esc(i.un)}</span>`).join('')}</div>${x.obs?`<div class="req-bottom">Obs.: ${esc(x.obs)}</div>`:''}<div class="pend-actions">${!pago&&canEditStock()?`<button class="green" type="button" onclick="marcarEmprestimoPago('${x.id}');event.stopPropagation()">✓ Marcar como pago</button>`:''}${canDelete()?`<button class="danger" type="button" onclick="excluirEmprestimo('${x.id}');event.stopPropagation()">🗑️ Excluir</button>`:''}</div></div>`;}).join('');}
-function marcarEmprestimoPago(i){if(!canEditStock())return denyOperate();const e=db.emprestimos.find(x=>String(x.id)===String(i));if(!e||e.status==='Pago')return;if(!confirm(`Marcar ${e.numero} como pago/devolvido?\n\nOs produtos serão devolvidos ao estoque.`))return;for(const it of e.itens||[]){const p=db.produtos.find(x=>String(x.id)===String(it.prodId));if(p){p.estoque=arred(p.estoque+Number(it.qtd));db.mov.push({id:id(),data:hojeISO(),prodId:p.id,prod:p.nome,tipo:'entrada',qtd:Number(it.qtd),un:p.un,motivo:`Devolução ${e.numero} · ${e.pessoa}`,origem:'emprestimo_devolucao',emprestimoId:e.id});}}e.status='Pago';e.pagoEm=now();registrarAuditoria('Empréstimo','Marcou como pago/devolvido',`${e.numero} · ${e.pessoa}`);save();}
+ const box=document.getElementById('pendTable');if(!box)return;const busca=(document.getElementById('pendBusca')?.value||'').toLowerCase().trim(),status=document.getElementById('pendStatusFiltro')?.value||'',tipoF=document.getElementById('pendTipoFiltro')?.value||'';const all=(db.emprestimos||[]).slice().reverse();const list=all.filter(x=>(!status||x.status===status)&&(!tipoF||(x.tipo==='tomado'?'tomado':'cedido')===tipoF)&&(!busca||`${x.numero} ${x.pessoa} ${x.obs||''} ${(x.itens||[]).map(i=>i.prod).join(' ')}`.toLowerCase().includes(busca)));const c=document.getElementById('pendCount');if(c)c.textContent=all.length;if(!list.length){box.innerHTML='<div class="req-empty">Nenhum empréstimo encontrado.</div>';return;}box.innerHTML=list.map(x=>{const pago=x.status==='Pago',tom=x.tipo==='tomado';return `<div class="req-card pend-card ${pago?'pend-paid':''}"><div class="req-card-top"><div><div class="req-code">${esc(x.numero)} · ${tom?'↙ Peguei emprestado':'↗ Emprestei'}</div><div class="req-meta">👤 ${tom?'De':'Para'}: ${esc(x.pessoa)} · ${esc(formatDateBR(x.data))}</div></div><span class="req-badge ${pago?'status-entregue':'status-pendente'}">${pago?'Pago':'Pendente'}</span></div><div class="pend-items">${(x.itens||[]).map(i=>`<span>${esc(i.prod)} · ${i.qtd} ${esc(i.un)}</span>`).join('')}</div>${x.obs?`<div class="req-bottom">Obs.: ${esc(x.obs)}</div>`:''}<div class="pend-actions">${!pago&&canEditStock()?`<button class="green" type="button" onclick="marcarEmprestimoPago('${x.id}');event.stopPropagation()">${tom?'✓ Marcar como devolvido':'✓ Marcar como pago'}</button>`:''}${canDelete()?`<button class="danger" type="button" onclick="excluirEmprestimo('${x.id}');event.stopPropagation()">🗑️ Excluir</button>`:''}</div></div>`;}).join('');}
+function marcarEmprestimoPago(i){if(!canEditStock())return denyOperate();const e=db.emprestimos.find(x=>String(x.id)===String(i));if(!e||e.status==='Pago')return;const tom=e.tipo==='tomado';
+ if(tom){for(const it of e.itens||[]){const p=db.produtos.find(x=>String(x.id)===String(it.prodId));if(p&&Number(p.estoque)<Number(it.qtd))return alert(`Estoque insuficiente de ${it.prod} para devolver. Disponível: ${p.estoque} ${p.un}.`);}}
+ if(!confirm(tom?`Marcar ${e.numero} como devolvido?\n\nOs produtos serão retirados do estoque (devolvidos para ${e.pessoa}).`:`Marcar ${e.numero} como pago/devolvido?\n\nOs produtos serão devolvidos ao estoque.`))return;
+ for(const it of e.itens||[]){const p=db.produtos.find(x=>String(x.id)===String(it.prodId));if(p){p.estoque=arred(p.estoque+(tom?-1:1)*Number(it.qtd));db.mov.push({id:id(),data:hojeISO(),prodId:p.id,prod:p.nome,tipo:tom?'saida':'entrada',qtd:Number(it.qtd),un:p.un,motivo:tom?`Devolução de empréstimo ${e.numero} · ${e.pessoa}`:`Devolução ${e.numero} · ${e.pessoa}`,origem:tom?'emprestimo':'emprestimo_devolucao',emprestimoId:e.id});}}
+ e.status='Pago';e.pagoEm=now();registrarAuditoria('Empréstimo',tom?'Marcou empréstimo recebido como devolvido':'Marcou como pago/devolvido',`${e.numero} · ${e.pessoa}`);save();}
 function excluirEmprestimo(i){if(!canDelete())return denyDelete();const e=db.emprestimos.find(x=>String(x.id)===String(i));if(!e)return;if(e.status!=='Pago')return alert('Só é possível excluir um empréstimo depois de marcar como pago/devolvido.');if(!confirm(`Excluir ${e.numero}? O histórico de estoque será mantido.`))return;registrarAuditoria('Empréstimo','Excluiu empréstimo',`${e.numero} · ${e.pessoa}`);db.emprestimos=db.emprestimos.filter(x=>String(x.id)!==String(i));save();}
-function limparFiltrosPendencias(){['pendBusca','pendStatusFiltro'].forEach(i=>{const e=document.getElementById(i);if(e)e.value='';});renderPendencias();}
+function limparFiltrosPendencias(){['pendBusca','pendStatusFiltro','pendTipoFiltro'].forEach(i=>{const e=document.getElementById(i);if(e)e.value='';});renderPendencias();}
 
 function normalizeReq(r){
   if(!r || typeof r!=="object")return r;
@@ -1781,12 +1789,12 @@ function montarRelatorio(tipo){
           {nome:'Itens',titulo:'Itens das requisições',colunas:[{t:'Requisição',tipo:'texto'},{t:'Setor',tipo:'texto'},{t:'Produto',tipo:'texto',larg:34},{t:'Solicitado',tipo:'num'},{t:'Entregue',tipo:'num'},{t:'Unidade',tipo:'texto'}],linhas:itens}]};
     }
     case 'pendencias':{
-      const busca=(document.getElementById('pendBusca')?.value||'').toLowerCase().trim(),status=document.getElementById('pendStatusFiltro')?.value||'';
-      const lista=(db.emprestimos||[]).slice().reverse().filter(x=>(!status||x.status===status)&&(!busca||`${x.numero} ${x.pessoa} ${x.obs||''} ${(x.itens||[]).map(i=>i.prod).join(' ')}`.toLowerCase().includes(busca)));
+      const busca=(document.getElementById('pendBusca')?.value||'').toLowerCase().trim(),status=document.getElementById('pendStatusFiltro')?.value||'',tipoF=document.getElementById('pendTipoFiltro')?.value||'';
+      const lista=(db.emprestimos||[]).slice().reverse().filter(x=>(!status||x.status===status)&&(!tipoF||(x.tipo==='tomado'?'tomado':'cedido')===tipoF)&&(!busca||`${x.numero} ${x.pessoa} ${x.obs||''} ${(x.itens||[]).map(i=>i.prod).join(' ')}`.toLowerCase().includes(busca)));
       const pend=lista.filter(x=>x.status!=='Pago').length;
       return {...base,titulo:'Pendências (empréstimos)',arquivo:'pendencias',resumo:[['Empréstimos listados',lista.length,'num'],['Pendentes',pend,'num'],['Pagos / devolvidos',lista.length-pend,'num']],
-        secoes:[{nome:'Pendências',titulo:'Empréstimos',colunas:[{t:'Número',tipo:'texto'},{t:'Data',tipo:'data'},{t:'Pessoa',tipo:'texto',larg:24},{t:'Status',tipo:'texto'},{t:'Itens',tipo:'texto',larg:50},{t:'Observação',tipo:'texto',larg:30},{t:'Devolvido em',tipo:'texto',larg:20}],
-          linhas:lista.map(x=>[x.numero,x.data,x.pessoa,x.status,(x.itens||[]).map(i=>`${i.prod} — ${i.qtd} ${i.un||''}`).join('; '),x.obs||'',x.pagoEm||''])}]};
+        secoes:[{nome:'Pendências',titulo:'Empréstimos',colunas:[{t:'Número',tipo:'texto'},{t:'Tipo',tipo:'texto',larg:18},{t:'Data',tipo:'data'},{t:'Pessoa',tipo:'texto',larg:24},{t:'Status',tipo:'texto'},{t:'Itens',tipo:'texto',larg:50},{t:'Observação',tipo:'texto',larg:30},{t:'Devolvido em',tipo:'texto',larg:20}],
+          linhas:lista.map(x=>[x.numero,x.tipo==='tomado'?'Peguei emprestado':'Emprestei',x.data,x.pessoa,x.status,(x.itens||[]).map(i=>`${i.prod} — ${i.qtd} ${i.un||''}`).join('; '),x.obs||'',x.pagoEm||''])}]};
     }
     case 'suco':case 'gelo':{
       const mes=document.getElementById(tipo+'MesFiltro')?.value||mesAtualISO();
@@ -1947,7 +1955,7 @@ function rncProximoNumero(){
   const base=nums.length?Math.max(...nums):0;
   return 'RNC-'+String(base+1).padStart(4,'0');
 }
-function rncQtdTxt(r){const n=Number(r&&r.qtd);if(!Number.isFinite(n)||n<=0)return '';return n.toLocaleString('pt-BR',{maximumFractionDigits:3})+(r.un?' '+r.un:'');}
+function rncQtdTxt(r,semUn){const n=Number(r&&r.qtd);if(!Number.isFinite(n)||n<=0)return '';return n.toLocaleString('pt-BR',{maximumFractionDigits:3})+(!semUn&&r.un?' '+r.un:'');}
 function rncCatDe(p){return String(p&&p.categoria||'Sem categoria').trim()||'Sem categoria';}
 function rncPopularCategorias(){
   const sel=document.getElementById('rncCategoria');if(!sel)return;
@@ -1974,6 +1982,12 @@ function rncPopularProdutos(){
     const atual=sel.value;sel.innerHTML=html;sel.dataset.sig=html;
     if(lista.some(p=>String(p.id)===String(atual)))sel.value=atual;
   }
+  rncAtualizarUn();
+}
+function rncAtualizarUn(){
+  const sel=document.getElementById('rncProduto'),un=document.getElementById('rncUn');if(!un)return;
+  const p=sel&&sel.value?db.produtos.find(x=>String(x.id)===String(sel.value)):null;
+  un.value=p?(p.un||'UN'):'';
 }
 function rncRenderFotoPreview(){
   const box=document.getElementById('rncFotoPreview');if(!box)return;
@@ -2027,7 +2041,7 @@ function addRnc(){
     return;
   }
   ['rncDescricao','rncNota','rncQtd'].forEach(i=>{document.getElementById(i).value='';});
-  document.getElementById('rncTipo').value='';document.getElementById('rncProduto').value='';
+  document.getElementById('rncTipo').value='';document.getElementById('rncProduto').value='';rncAtualizarUn();
   rncFotoTemp='';rncRenderFotoPreview();
   if(confirm(`✅ ${r.numero} solicitada com sucesso.\n\nDeseja gerar o PDF agora?`))rncExportarPDF(r.id);
 }
@@ -2063,7 +2077,7 @@ function renderRnc(){
   const podeOperar=!!currentUser()&&canOperateStock();
   box.innerHTML=list.map(r=>{
     const res=rncStatus(r)==='Resolvida';
-    return `<div class="req-card rnc-item ${res?'rnc-resolvida':'rnc-aberta'}"><div class="req-card-top"><div><div class="req-code">${esc(r.numero)}</div><div class="req-meta">📦 ${esc(r.prod)} · ${esc(r.categoria||'Sem categoria')}${r.qtd?`<br>🔢 Quantidade: ${esc(rncQtdTxt(r))}`:''}<br>📅 ${esc(formatDateBR(r.data))} · 👤 ${esc(r.usuario||'—')}${r.nota?`<br>🧾 Nota fiscal ${esc(r.nota)}`:''}</div></div><span class="req-badge ${res?'status-entregue':'status-pendente'}">${res?'Resolvida':'Aberta'}</span></div><div class="pend-items"><span>${esc(r.tipo)}</span></div>${r.descricao?`<div class="req-bottom rnc-desc">${esc(r.descricao)}</div>`:''}${r.foto?`<img class="rnc-thumb" src="${r.foto}" alt="Foto da ${esc(r.numero)}" onclick="rncAbrirFoto('${esc(r.id)}')">`:''}${res?`<div class="rnc-retorno"><b>Resolvida em ${esc(formatDateBR(r.resolvidaData))}</b>${r.resolvidaPor?` por ${esc(r.resolvidaPor)}`:''}${r.retorno?`<div>${esc(r.retorno)}</div>`:''}</div>`:''}<div class="pend-actions">${podeOperar?(res?`<button class="secondary" type="button" onclick="rncReabrir('${esc(r.id)}')">🔄 Reabrir</button>`:`<button class="green" type="button" onclick="rncResolver('${esc(r.id)}')">✅ Marcar como resolvida</button>`):''}<button class="secondary" type="button" onclick="rncExportarPDF('${esc(r.id)}')">📄 PDF</button><button class="secondary" type="button" onclick="rncExportarExcel('${esc(r.id)}')">📊 Excel</button>${canDelete()?`<button class="danger" type="button" onclick="rncExcluir('${esc(r.id)}')">🗑️ Excluir</button>`:''}</div></div>`;
+    return `<div class="req-card rnc-item ${res?'rnc-resolvida':'rnc-aberta'}"><div class="req-card-top"><div><div class="req-code">${esc(r.numero)}</div><div class="req-meta">📦 ${esc(r.prod)} · ${esc(r.categoria||'Sem categoria')}${r.qtd?`<br>🔢 Quantidade: ${esc(rncQtdTxt(r,true))}${r.un?` · Unidade: ${esc(r.un)}`:''}`:''}<br>📅 ${esc(formatDateBR(r.data))} · 👤 ${esc(r.usuario||'—')}${r.nota?`<br>🧾 Nota fiscal ${esc(r.nota)}`:''}</div></div><span class="req-badge ${res?'status-entregue':'status-pendente'}">${res?'Resolvida':'Aberta'}</span></div><div class="pend-items"><span>${esc(r.tipo)}</span></div>${r.descricao?`<div class="req-bottom rnc-desc">${esc(r.descricao)}</div>`:''}${r.foto?`<img class="rnc-thumb" src="${r.foto}" alt="Foto da ${esc(r.numero)}" onclick="rncAbrirFoto('${esc(r.id)}')">`:''}${res?`<div class="rnc-retorno"><b>Resolvida em ${esc(formatDateBR(r.resolvidaData))}</b>${r.resolvidaPor?` por ${esc(r.resolvidaPor)}`:''}${r.retorno?`<div>${esc(r.retorno)}</div>`:''}</div>`:''}<div class="pend-actions">${podeOperar?(res?`<button class="secondary" type="button" onclick="rncReabrir('${esc(r.id)}')">🔄 Reabrir</button>`:`<button class="green" type="button" onclick="rncResolver('${esc(r.id)}')">✅ Marcar como resolvida</button>`):''}<button class="secondary" type="button" onclick="rncExportarPDF('${esc(r.id)}')">📄 PDF</button><button class="secondary" type="button" onclick="rncExportarExcel('${esc(r.id)}')">📊 Excel</button>${canDelete()?`<button class="danger" type="button" onclick="rncExcluir('${esc(r.id)}')">🗑️ Excluir</button>`:''}</div></div>`;
   }).join('');
   normalizeIcons(box);
 }
@@ -2096,7 +2110,7 @@ function rncExportarPDF(i){
   const r=rncLista().find(x=>String(x.id)===String(i));if(!r)return;
   document.getElementById('relPrintDoc')?.remove();document.getElementById('relPrintPageStyle')?.remove();
   const emitido=_agoraTxt(),res=rncStatus(r)==='Resolvida';
-  const meta=[['Data da RNC',formatDateBR(r.data)],['Status',rncStatus(r)],['Categoria',r.categoria||'Sem categoria'],['Produto',r.prod],['Quantidade',rncQtdTxt(r)||'—'],['Nota fiscal',r.nota||'—'],['Tipo de problema',r.tipo],['Solicitante',r.usuario||'—'],['Emitido em',emitido]];
+  const meta=[['Data da RNC',formatDateBR(r.data)],['Status',rncStatus(r)],['Categoria',r.categoria||'Sem categoria'],['Produto',r.prod],['Quantidade',rncQtdTxt(r,true)||'—'],['Unidade de medida',r.un||'—'],['Nota fiscal',r.nota||'—'],['Tipo de problema',r.tipo],['Solicitante',r.usuario||'—'],['Emitido em',emitido]];
   const retorno=res?`<div class="rel-sec">Resolução</div><div class="rnc-doc-texto"><b>Resolvida em ${esc(formatDateBR(r.resolvidaData))}</b>${r.resolvidaPor?` por ${esc(r.resolvidaPor)}`:''}${r.retorno?`<br>${esc(r.retorno)}`:''}</div>`:'';
   const doc=document.createElement('div');doc.id='relPrintDoc';
   doc.innerHTML=`<div class="rel-page"><div class="rel-top"><span class="rel-brand">O ESTOQUISTA</span><span class="rel-doc">RNC — Registro de não conformidade</span></div><div class="rel-title">${esc(r.numero)}</div><div class="rel-meta">${meta.map(([a,b])=>`<div><span>${esc(a)}</span><b>${esc(b)}</b></div>`).join('')}</div><div class="rel-sec">Descrição</div><div class="rnc-doc-texto">${r.descricao?esc(r.descricao):'<i>Sem descrição.</i>'}</div>${retorno}${r.foto?`<div class="rel-sec">Foto</div><div class="rnc-doc-foto"><img src="${r.foto}" alt="Foto da ${esc(r.numero)}"></div>`:''}</div><div class="rel-foot">Documento gerado por O Estoquista em ${esc(emitido)}</div>`;
