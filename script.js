@@ -1947,6 +1947,7 @@ function rncProximoNumero(){
   const base=nums.length?Math.max(...nums):0;
   return 'RNC-'+String(base+1).padStart(4,'0');
 }
+function rncQtdTxt(r){const n=Number(r&&r.qtd);if(!Number.isFinite(n)||n<=0)return '';return n.toLocaleString('pt-BR',{maximumFractionDigits:3})+(r.un?' '+r.un:'');}
 function rncCatDe(p){return String(p&&p.categoria||'Sem categoria').trim()||'Sem categoria';}
 function rncPopularCategorias(){
   const sel=document.getElementById('rncCategoria');if(!sel)return;
@@ -2014,7 +2015,9 @@ function addRnc(){
   if(!cat||!prod)return alert('Selecione a categoria e o produto.');
   const tipo=document.getElementById('rncTipo').value;
   if(!tipo)return alert('Selecione o tipo de problema.');
-  const r={id:id(),numero:rncProximoNumero(),data:hojeISO(),dataHora:new Date().toISOString(),categoria:rncCatDe(prod),prodId:prod.id,prod:prod.nome,un:prod.un||'',tipo,nota:(document.getElementById('rncNota').value||'').trim(),descricao:(document.getElementById('rncDescricao').value||'').trim(),foto:rncFotoTemp||'',status:'Aberta',usuario:usuarioAtualNome()};
+  const qtd=parseFloat(String(document.getElementById('rncQtd').value||'').replace(',','.'));
+  if(!Number.isFinite(qtd)||qtd<=0)return alert('Informe a quantidade com problema.');
+  const r={id:id(),numero:rncProximoNumero(),data:hojeISO(),dataHora:new Date().toISOString(),categoria:rncCatDe(prod),prodId:prod.id,prod:prod.nome,un:prod.un||'',qtd,tipo,nota:(document.getElementById('rncNota').value||'').trim(),descricao:(document.getElementById('rncDescricao').value||'').trim(),foto:rncFotoTemp||'',status:'Aberta',usuario:usuarioAtualNome()};
   rncLista().push(r);
   registrarAuditoria('RNC','Solicitou RNC',`${r.numero} · ${r.prod} · ${r.tipo}`);
   if(!save()){
@@ -2023,7 +2026,7 @@ function addRnc(){
     alert('❌ Não foi possível salvar a RNC. Se ela tem foto, tente uma foto menor ou sem foto.');
     return;
   }
-  ['rncDescricao','rncNota'].forEach(i=>{document.getElementById(i).value='';});
+  ['rncDescricao','rncNota','rncQtd'].forEach(i=>{document.getElementById(i).value='';});
   document.getElementById('rncTipo').value='';document.getElementById('rncProduto').value='';
   rncFotoTemp='';rncRenderFotoPreview();
   if(confirm(`✅ ${r.numero} solicitada com sucesso.\n\nDeseja gerar o PDF agora?`))rncExportarPDF(r.id);
@@ -2047,7 +2050,7 @@ function rncReabrir(i){
 }
 function rncFiltradas(){
   const busca=(document.getElementById('rncBusca')?.value||'').toLowerCase().trim(),tipo=document.getElementById('rncTipoFiltro')?.value||'',st=document.getElementById('rncStatusFiltro')?.value||'';
-  return rncLista().filter(x=>(!tipo||x.tipo===tipo)&&(!st||rncStatus(x)===st)&&(!busca||`${x.numero} ${x.prod} ${x.categoria} ${x.tipo} ${x.nota||''} ${x.descricao||''} ${x.retorno||''}`.toLowerCase().includes(busca)));
+  return rncLista().filter(x=>(!tipo||x.tipo===tipo)&&(!st||rncStatus(x)===st)&&(!busca||`${x.numero} ${x.prod} ${x.categoria} ${x.tipo} ${x.qtd||''} ${x.nota||''} ${x.descricao||''} ${x.retorno||''}`.toLowerCase().includes(busca)));
 }
 function limparFiltrosRnc(){['rncBusca','rncTipoFiltro','rncStatusFiltro'].forEach(i=>{const e=document.getElementById(i);if(e)e.value='';});renderRnc();}
 function renderRnc(){
@@ -2060,7 +2063,7 @@ function renderRnc(){
   const podeOperar=!!currentUser()&&canOperateStock();
   box.innerHTML=list.map(r=>{
     const res=rncStatus(r)==='Resolvida';
-    return `<div class="req-card rnc-item ${res?'rnc-resolvida':'rnc-aberta'}"><div class="req-card-top"><div><div class="req-code">${esc(r.numero)}</div><div class="req-meta">📦 ${esc(r.prod)} · ${esc(r.categoria||'Sem categoria')}<br>📅 ${esc(formatDateBR(r.data))} · 👤 ${esc(r.usuario||'—')}${r.nota?`<br>🧾 Nota fiscal ${esc(r.nota)}`:''}</div></div><span class="req-badge ${res?'status-entregue':'status-pendente'}">${res?'Resolvida':'Aberta'}</span></div><div class="pend-items"><span>${esc(r.tipo)}</span></div>${r.descricao?`<div class="req-bottom rnc-desc">${esc(r.descricao)}</div>`:''}${r.foto?`<img class="rnc-thumb" src="${r.foto}" alt="Foto da ${esc(r.numero)}" onclick="rncAbrirFoto('${esc(r.id)}')">`:''}${res?`<div class="rnc-retorno"><b>Resolvida em ${esc(formatDateBR(r.resolvidaData))}</b>${r.resolvidaPor?` por ${esc(r.resolvidaPor)}`:''}${r.retorno?`<div>${esc(r.retorno)}</div>`:''}</div>`:''}<div class="pend-actions">${podeOperar?(res?`<button class="secondary" type="button" onclick="rncReabrir('${esc(r.id)}')">🔄 Reabrir</button>`:`<button class="green" type="button" onclick="rncResolver('${esc(r.id)}')">✅ Marcar como resolvida</button>`):''}<button class="secondary" type="button" onclick="rncExportarPDF('${esc(r.id)}')">📄 PDF</button><button class="secondary" type="button" onclick="rncExportarExcel('${esc(r.id)}')">📊 Excel</button>${canDelete()?`<button class="danger" type="button" onclick="rncExcluir('${esc(r.id)}')">🗑️ Excluir</button>`:''}</div></div>`;
+    return `<div class="req-card rnc-item ${res?'rnc-resolvida':'rnc-aberta'}"><div class="req-card-top"><div><div class="req-code">${esc(r.numero)}</div><div class="req-meta">📦 ${esc(r.prod)} · ${esc(r.categoria||'Sem categoria')}${r.qtd?`<br>🔢 Quantidade: ${esc(rncQtdTxt(r))}`:''}<br>📅 ${esc(formatDateBR(r.data))} · 👤 ${esc(r.usuario||'—')}${r.nota?`<br>🧾 Nota fiscal ${esc(r.nota)}`:''}</div></div><span class="req-badge ${res?'status-entregue':'status-pendente'}">${res?'Resolvida':'Aberta'}</span></div><div class="pend-items"><span>${esc(r.tipo)}</span></div>${r.descricao?`<div class="req-bottom rnc-desc">${esc(r.descricao)}</div>`:''}${r.foto?`<img class="rnc-thumb" src="${r.foto}" alt="Foto da ${esc(r.numero)}" onclick="rncAbrirFoto('${esc(r.id)}')">`:''}${res?`<div class="rnc-retorno"><b>Resolvida em ${esc(formatDateBR(r.resolvidaData))}</b>${r.resolvidaPor?` por ${esc(r.resolvidaPor)}`:''}${r.retorno?`<div>${esc(r.retorno)}</div>`:''}</div>`:''}<div class="pend-actions">${podeOperar?(res?`<button class="secondary" type="button" onclick="rncReabrir('${esc(r.id)}')">🔄 Reabrir</button>`:`<button class="green" type="button" onclick="rncResolver('${esc(r.id)}')">✅ Marcar como resolvida</button>`):''}<button class="secondary" type="button" onclick="rncExportarPDF('${esc(r.id)}')">📄 PDF</button><button class="secondary" type="button" onclick="rncExportarExcel('${esc(r.id)}')">📊 Excel</button>${canDelete()?`<button class="danger" type="button" onclick="rncExcluir('${esc(r.id)}')">🗑️ Excluir</button>`:''}</div></div>`;
   }).join('');
   normalizeIcons(box);
 }
@@ -2081,8 +2084,8 @@ function rncRelatorio(lista,titulo){
   const ab=lista.filter(r=>rncStatus(r)==='Aberta').length;
   return {meta:[],titulo,arquivo:'rnc',
     resumo:[['RNCs listadas',lista.length,'num'],['Abertas',ab,'num'],['Resolvidas',lista.length-ab,'num']],
-    secoes:[{nome:'RNC',titulo:'Registros de RNC',colunas:[{t:'Número',tipo:'texto'},{t:'Data',tipo:'data'},{t:'Categoria',tipo:'texto',larg:20},{t:'Produto',tipo:'texto',larg:34},{t:'Nota fiscal',tipo:'texto',larg:14},{t:'Tipo de problema',tipo:'texto',larg:32},{t:'Descrição',tipo:'texto',larg:46},{t:'Status',tipo:'texto'},{t:'Retorno do fornecedor',tipo:'texto',larg:40},{t:'Resolvida em',tipo:'data'},{t:'Foto',tipo:'texto'},{t:'Solicitante',tipo:'texto',larg:26}],
-      linhas:lista.map(r=>[r.numero,r.data,r.categoria||'Sem categoria',r.prod,r.nota||'',r.tipo,r.descricao||'',rncStatus(r),r.retorno||'',r.resolvidaData||'',r.foto?'Sim':'Não',r.usuario||''])}]};
+    secoes:[{nome:'RNC',titulo:'Registros de RNC',colunas:[{t:'Número',tipo:'texto'},{t:'Data',tipo:'data'},{t:'Categoria',tipo:'texto',larg:20},{t:'Produto',tipo:'texto',larg:34},{t:'Quantidade',tipo:'num'},{t:'Unidade',tipo:'texto'},{t:'Nota fiscal',tipo:'texto',larg:14},{t:'Tipo de problema',tipo:'texto',larg:32},{t:'Descrição',tipo:'texto',larg:46},{t:'Status',tipo:'texto'},{t:'Retorno do fornecedor',tipo:'texto',larg:40},{t:'Resolvida em',tipo:'data'},{t:'Foto',tipo:'texto'},{t:'Solicitante',tipo:'texto',larg:26}],
+      linhas:lista.map(r=>[r.numero,r.data,r.categoria||'Sem categoria',r.prod,Number.isFinite(Number(r.qtd))&&r.qtd>0?Number(r.qtd):'',r.un||'',r.nota||'',r.tipo,r.descricao||'',rncStatus(r),r.retorno||'',r.resolvidaData||'',r.foto?'Sim':'Não',r.usuario||''])}]};
 }
 function rncExportarExcel(i){
   const r=rncLista().find(x=>String(x.id)===String(i));if(!r)return;
@@ -2093,7 +2096,7 @@ function rncExportarPDF(i){
   const r=rncLista().find(x=>String(x.id)===String(i));if(!r)return;
   document.getElementById('relPrintDoc')?.remove();document.getElementById('relPrintPageStyle')?.remove();
   const emitido=_agoraTxt(),res=rncStatus(r)==='Resolvida';
-  const meta=[['Data da RNC',formatDateBR(r.data)],['Status',rncStatus(r)],['Categoria',r.categoria||'Sem categoria'],['Produto',r.prod],['Nota fiscal',r.nota||'—'],['Tipo de problema',r.tipo],['Solicitante',r.usuario||'—'],['Emitido em',emitido]];
+  const meta=[['Data da RNC',formatDateBR(r.data)],['Status',rncStatus(r)],['Categoria',r.categoria||'Sem categoria'],['Produto',r.prod],['Quantidade',rncQtdTxt(r)||'—'],['Nota fiscal',r.nota||'—'],['Tipo de problema',r.tipo],['Solicitante',r.usuario||'—'],['Emitido em',emitido]];
   const retorno=res?`<div class="rel-sec">Resolução</div><div class="rnc-doc-texto"><b>Resolvida em ${esc(formatDateBR(r.resolvidaData))}</b>${r.resolvidaPor?` por ${esc(r.resolvidaPor)}`:''}${r.retorno?`<br>${esc(r.retorno)}`:''}</div>`:'';
   const doc=document.createElement('div');doc.id='relPrintDoc';
   doc.innerHTML=`<div class="rel-page"><div class="rel-top"><span class="rel-brand">O ESTOQUISTA</span><span class="rel-doc">RNC — Registro de não conformidade</span></div><div class="rel-title">${esc(r.numero)}</div><div class="rel-meta">${meta.map(([a,b])=>`<div><span>${esc(a)}</span><b>${esc(b)}</b></div>`).join('')}</div><div class="rel-sec">Descrição</div><div class="rnc-doc-texto">${r.descricao?esc(r.descricao):'<i>Sem descrição.</i>'}</div>${retorno}${r.foto?`<div class="rel-sec">Foto</div><div class="rnc-doc-foto"><img src="${r.foto}" alt="Foto da ${esc(r.numero)}"></div>`:''}</div><div class="rel-foot">Documento gerado por O Estoquista em ${esc(emitido)}</div>`;

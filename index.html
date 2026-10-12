@@ -267,6 +267,7 @@ function toggleLoginPass(){
 <div class="grid">
 <div><label>Categoria do produto</label><select id="rncCategoria" onchange="rncPopularProdutos()"></select></div>
 <div><label>Produto</label><select id="rncProduto"></select></div>
+<div><label>Quantidade com problema</label><input id="rncQtd" type="number" min="0.001" step="any" placeholder="Ex.: 3" inputmode="decimal"></div>
 <div><label>Tipo de problema</label><select id="rncTipo"><option value="">Selecione o problema...</option><option>Peso ou quantidade divergente</option><option>Embalagem danificada ou violada</option><option>Nota sem boleto</option><option>Nota com erro</option></select></div>
 <div><label>Nº da nota fiscal</label><input id="rncNota" maxlength="40" placeholder="Opcional" inputmode="numeric" autocomplete="off"></div>
 <div class="rnc-span-2"><label>Descrição</label><textarea id="rncDescricao" rows="3" placeholder="Descreva o que foi encontrado..."></textarea></div>
