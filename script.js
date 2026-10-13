@@ -2026,7 +2026,7 @@ function montarBarrasExportacao(){
 }
 function renderExportacaoMenu(){
   const box=document.getElementById('menuExportacaoLista');if(!box)return;
-  box.innerHTML=exportacoesPermitidas().map(t=>`<div class="export-row"><strong>${esc(_EXPORT_ROTULOS[t])}</strong><div class="export-btns"><button class="secondary" type="button" onclick="exportarRelatorio('${t}','pdf')">📄 PDF</button><button class="green" type="button" onclick="exportarRelatorio('${t}','xlsx')">📊 Excel</button></div></div>`).join('')||'<p class="muted">Nenhum relatório disponível para o seu perfil.</p>';
+  box.innerHTML=exportacoesPermitidas().map(t=>`<div class="export-row"><div class="export-row-label"><span class="export-row-icon" aria-hidden="true"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8l-5-5Z"/><path d="M14 3v5h5"/><path d="M9 17v-3"/><path d="M12 17v-5"/><path d="M15 17v-2"/></svg></span><strong>${esc(_EXPORT_ROTULOS[t])}</strong></div><div class="export-btns"><button class="secondary" type="button" onclick="exportarRelatorio('${t}','pdf')"><span class="btn-ic" aria-hidden="true"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8l-5-5Z"/><path d="M14 3v5h5"/><path d="M9 13h6"/><path d="M9 17h6"/></svg></span>PDF</button><button class="green" type="button" onclick="exportarRelatorio('${t}','xlsx')"><span class="btn-ic" aria-hidden="true"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="4.5" width="17" height="15" rx="2"/><path d="M3.5 10h17"/><path d="M3.5 15h17"/><path d="M9.5 4.5v15"/></svg></span>Excel</button></div></div>`).join('')||'<p class="muted">Nenhum relatório disponível para o seu perfil.</p>';
 }
 
 /* ---------- RNC (Registro de Não Conformidade) ---------- */
@@ -2376,7 +2376,7 @@ function atualizarCardInstalar(){
   const card=document.getElementById('cardInstalarApp');if(!card)return;
   const btn=document.getElementById('btnInstalarApp'),txt=document.getElementById('instalarTexto');
   const ios=/iphone|ipad|ipod/i.test(navigator.userAgent);
-  if(appJaInstalado()){if(txt)txt.textContent='✅ O Estoquista já está instalado neste aparelho.';if(btn)btn.style.display='none';return;}
+  if(appJaInstalado()){if(txt)txt.innerHTML='<span class="menu-ok"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="m8 12.5 2.8 2.8L16 9.5"/></svg>O Estoquista já está instalado neste aparelho.</span>';if(btn)btn.style.display='none';return;}
   if(_promptInstalar){if(txt)txt.textContent='Instale o O Estoquista na tela inicial do aparelho: abre em tela cheia, como um aplicativo.';if(btn)btn.style.display='inline-block';return;}
   if(btn)btn.style.display='none';
   if(txt)txt.textContent=ios?'No iPhone/iPad: abra este site no Safari, toque em Compartilhar e escolha "Adicionar à Tela de Início".':'Para instalar: abra o menu do navegador (⋮) e escolha "Instalar aplicativo" ou "Adicionar à tela inicial".';
