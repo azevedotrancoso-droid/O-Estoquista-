@@ -550,11 +550,33 @@ function render(){
   renderAnaliseCMV();
   renderRelatorios();
   renderAuditoria();
-  const userRows=db.users.map(u=>{
-    const actions=u.login==="admin"?(canDelete()?`<div class="actions"><button class="action-btn" onclick="editUser('${u.id}')">✏️ Editar</button><span class="muted">🔒 Principal</span></div>`:'<span class="muted">🔒 Principal</span>'):(canDelete()?`<div class="actions"><button class="action-btn" onclick="editUser('${u.id}')">✏️ Editar</button><button class="trash-btn action-btn" onclick="delUser('${u.id}')" title="Excluir usuário" aria-label="Excluir usuário"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M19 6l-1 15H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/></svg>Excluir</button></div>`:`<span class="muted">🔒 Sem permissão</span>`);
-    return `<tr><td>${esc(u.nome)}</td><td>${esc(u.login)}</td><td>${esc(u.email||"—")}</td><td>${esc(u.perfil)}</td><td>${actions}</td></tr>`;
-  }).join("");
-  userTable.innerHTML=db.users.length?`<div class="product-table-wrap"><table><tr><th>Nome</th><th>Usuário</th><th>E-mail</th><th>Perfil</th><th>Ações</th></tr>${userRows}</table></div>`:"<p class='muted'>Nenhum usuário cadastrado.</p>";
+  renderUsuarios();
+}
+function userIniciais(nome){const p=String(nome||'').trim().split(/\s+/).filter(Boolean);if(!p.length)return '?';return ((p[0][0]||'')+(p.length>1?(p[p.length-1][0]||''):'')).toUpperCase();}
+function userPerfilClasse(perfil){return 'role-'+String(perfil||'consulta').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z]/g,'');}
+function renderUsuarios(){
+  const box=document.getElementById('userTable');if(!box)return;
+  const busca=(document.getElementById('userBusca')?.value||'').trim().toLowerCase();
+  const perfilF=document.getElementById('userPerfilFiltro')?.value||'';
+  const todos=db.users||[];
+  const lista=todos.filter(u=>(!perfilF||u.perfil===perfilF)&&(!busca||`${u.nome} ${u.login} ${u.email||''} ${u.perfil}`.toLowerCase().includes(busca)));
+  const resumo=document.getElementById('userResumo');
+  if(resumo){
+    const perfis=['Administrador','Estoquista','RH','Bar','Consulta'];
+    resumo.innerHTML=`<span class="summary-pill">${todos.length} usuário${todos.length===1?'':'s'}</span>`+perfis.map(p=>({p,n:todos.filter(u=>u.perfil===p).length})).filter(x=>x.n).map(x=>`<span class="summary-pill">${esc(x.p)}: ${x.n}</span>`).join('');
+  }
+  const cont=document.getElementById('userContagem');
+  if(cont)cont.textContent=(busca||perfilF)?`${lista.length} de ${todos.length} usuário(s) exibido(s)`:`${todos.length} usuário(s) com acesso ao sistema`;
+  if(!todos.length){box.innerHTML="<div class='report-empty'>Nenhum usuário cadastrado.</div>";return;}
+  if(!lista.length){box.innerHTML="<div class='report-empty'>Nenhum usuário encontrado com esse filtro.</div>";return;}
+  box.innerHTML=`<div class="user-list">${lista.map(u=>{
+    const principal=String(u.login||'').toLowerCase()==='admin';
+    const editar=`<button class="action-btn" onclick="editUser('${esc(u.id)}')"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20h4L19 9a2.8 2.8 0 0 0-4-4L4 16v4Z"/><path d="m13.5 6.5 4 4"/></svg>Editar</button>`;
+    const excluir=`<button class="trash-btn action-btn" onclick="delUser('${esc(u.id)}')" title="Excluir usuário" aria-label="Excluir usuário"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M19 6l-1 15H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/></svg>Excluir</button>`;
+    const trava=(txt)=>`<span class="user-lock"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>${txt}</span>`;
+    const acoes=canDelete()?(principal?editar+trava('Conta principal'):editar+excluir):trava('Sem permissão');
+    return `<div class="user-card"><div class="user-avatar" aria-hidden="true">${esc(userIniciais(u.nome))}</div><div class="user-info"><div class="user-name">${esc(u.nome)}</div><div class="user-meta">@${esc(u.login)}</div><div class="user-meta">${esc(u.email||'Sem e-mail')}</div></div><span class="user-role ${userPerfilClasse(u.perfil)}">${esc(u.perfil)}</span><div class="user-actions">${acoes}</div></div>`;
+  }).join('')}</div>`;
 }
 function arred(n){return Math.round((Number(n)||0)*1000)/1000}
 function id(){return Date.now().toString(36)+Math.random().toString(36).slice(2)}
@@ -616,6 +638,23 @@ function criarCategoria(){
   renderProdutos();
 }
 
+function custoProd(p){const c=Number(p&&p.custo);return Number.isFinite(c)&&c>0?c:0;}
+function temCusto(p){return custoProd(p)>0;}
+function valorProd(p){return Math.round((Number(p&&p.estoque)||0)*custoProd(p)*100)/100;}
+function atualizarCustoProduto(pid,valor){
+  if(!canEditProdutos())return denyOperate();
+  const p=db.produtos.find(x=>String(x.id)===String(pid));if(!p)return;
+  if(temCusto(p)){alert('O custo deste produto já foi cadastrado e não pode ser alterado.');renderProdutos();return;}
+  const txt=String(valor==null?'':valor).trim().replace(',','.');
+  if(txt===''){renderProdutos();return;}
+  const n=Number(txt);
+  if(!Number.isFinite(n)||n<=0){alert('Informe um custo válido, maior que zero.');renderProdutos();return;}
+  const custo=Math.round(n*10000)/10000;
+  if(!confirm(`Cadastrar o custo de "${p.nome}" em ${moedaBR(custo)} por ${p.un}?\n\nDepois de salvo, o custo NÃO poderá ser alterado.`)){renderProdutos();return;}
+  p.custo=custo;
+  registrarAuditoria('Produto','Cadastrou custo do produto',`Produto: ${p.nome} · Custo: ${moedaBR(custo)} por ${p.un}`);
+  save();
+}
 function renderProdutos(){
   normalizarCategoriasProdutos();
  const termo=(document.getElementById("buscaProduto")?.value||"").toLowerCase().trim();
@@ -626,17 +665,17 @@ function renderProdutos(){
    const nome=String(p.nome||"");
    const match=!termo || nome.toLowerCase().includes(termo) || String(p.cod||"").toLowerCase().includes(termo);
    const baixo=p.estoque<=p.min;
-   return match && (filtro==="todos" || (filtro==="baixo"&&baixo) || (filtro==="normal"&&!baixo)) && (!filtroCategoria || (p.categoria||"")===filtroCategoria);
+   return match && (filtro==="todos" || (filtro==="baixo"&&baixo) || (filtro==="normal"&&!baixo) || (filtro==="semcusto"&&!temCusto(p))) && (!filtroCategoria || (p.categoria||"")===filtroCategoria);
  });
  const baixos=visiveis.filter(p=>p.estoque<=p.min).length;
  const norm=visiveis.length-baixos;
  const resumo=document.getElementById("prodResumo");
- if(resumo) resumo.innerHTML=`<span class="summary-pill">📦 ${visiveis.length} produtos</span><span class="summary-pill">🚨 ${baixos} com estoque baixo</span><span class="summary-pill">✅ ${norm} normais</span>`;
+ if(resumo) resumo.innerHTML=`<span class="summary-pill"><span class="cmv-inline-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="m12 3 8 4.5v9L12 21l-8-4.5v-9L12 3Z"/><path d="m4 7.5 8 4.5 8-4.5"/><path d="M12 12v9"/></svg></span>${visiveis.length} produtos</span><span class="summary-pill"><span class="cmv-inline-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 3 2.8 20h18.4L12 3Z"/><path d="M12 9v5"/><path d="M12 17h.01"/></svg></span>${baixos} com estoque baixo</span><span class="summary-pill"><span class="cmv-inline-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="m8 12.5 2.8 2.8L16 9.5"/></svg></span>${norm} normais</span><span class="summary-pill"><span class="cmv-inline-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="2.5" y="6" width="19" height="12" rx="2"/><circle cx="12" cy="12" r="2.6"/><path d="M6 9.5h.01"/><path d="M18 14.5h.01"/></svg></span>Valor do estoque: ${moedaBR(visiveis.reduce((t,p)=>t+valorProd(p),0))}</span>${visiveis.some(p=>!temCusto(p))?`<span class="summary-pill"><span class="cmv-inline-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 3 2.8 20h18.4L12 3Z"/><path d="M12 9v5"/><path d="M12 17h.01"/></svg></span>${visiveis.filter(p=>!temCusto(p)).length} sem custo</span>`:''}`;
  if(!lista.length){
    prodTable.innerHTML='<div class="empty-products">🔎 Nenhum produto encontrado com os filtros atuais.</div>';
    return;
  }
- prodTable.innerHTML=`<div class="product-table-wrap"><table class="product-table"><tr><th>Produto</th><th>Categoria</th><th>Unidade</th><th>Estoque atual</th><th>Estoque mínimo</th><th>Estoque ideal</th><th>Status</th><th>Ação</th></tr>${
+ prodTable.innerHTML=`<div class="product-table-wrap"><table class="product-table"><tr><th>Produto</th><th>Categoria</th><th>Unidade</th><th>Estoque atual</th><th>Estoque mínimo</th><th>Estoque ideal</th><th>Custo unitário</th><th>Valor em estoque</th><th>Status</th><th>Ação</th></tr>${
    lista.map(p=>{
      const baixo=p.estoque<=p.min;
      return `<tr>
@@ -650,11 +689,13 @@ function renderProdutos(){
        <td><span class="stock-number ${baixo?"stock-low":"stock-normal"}">${p.estoque}</span></td>
        <td>${p.min}</td>
        <td>${Number(p.ideal||Math.max(Number(p.min)||0,(Number(p.min)||0)*2))}</td>
+       <td>${temCusto(p)?`<span class="badge category-locked" title="O custo não pode ser alterado depois de cadastrado">🔒 ${moedaBR(p.custo)}</span>`:(canEditProdutos()?`<input class="product-cost-input" type="number" min="0.01" step="0.01" inputmode="decimal" placeholder="R$ 0,00" onchange="atualizarCustoProduto('${esc(p.id)}',this.value)" onkeydown="event.stopPropagation()" onclick="event.stopPropagation()" title="Custo por ${esc(p.un)} (só pode ser cadastrado uma vez)">`:'<span class="muted">—</span>')}</td>
+       <td>${temCusto(p)?`<b>${moedaBR(valorProd(p))}</b>`:'<span class="muted">sem custo</span>'}</td>
        <td>${baixo?'<span class="badge low">🚨 Estoque baixo</span>':'<span class="badge ok">✓ Normal</span>'}</td>
        <td>${canDelete()?`<button class="trash-btn action-btn" onclick="delProduto('${p.id}')" title="Excluir produto" aria-label="Excluir produto"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M19 6l-1 15H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/></svg>Excluir</button>`:`<span class="muted">🔒 Sem permissão</span>`}</td>
      </tr>`;
    }).join("")
- }</table></div>`;
+ }<tr class="product-total-row"><td colspan="7"><b>Total do que está listado (${lista.length} produto${lista.length===1?'':'s'})</b></td><td colspan="3"><b>${moedaBR(lista.reduce((t,p)=>t+valorProd(p),0))}</b></td></tr></table></div>`;
 }
 
 function addProduto(){
@@ -667,6 +708,8 @@ function addProduto(){
   const estoque = Number(document.getElementById("pEst")?.value || 0);
   const min = Number(document.getElementById("pMin")?.value || 0);
   const idealInput=(document.getElementById("pIdeal")?.value||"").trim();
+  const custoTxt=(document.getElementById("pCusto")?.value||"").trim().replace(",",".");
+  const custo=custoTxt===""?null:Number(custoTxt);
   const ideal = idealInput==="" || (Number(idealInput)===0 && min>0) ? Math.max(min,min*2) : Number(idealInput);
 
   if(!nome) return alert("Informe o nome.");
@@ -674,8 +717,10 @@ function addProduto(){
   if(!Number.isFinite(min) || min < 0) return alert("Informe um estoque mínimo válido.");
   if(!Number.isFinite(ideal) || ideal < min) return alert("O estoque ideal deve ser maior ou igual ao mínimo.");
   if(!categoria) return alert("Selecione a categoria.");
+  if(custo!==null&&(!Number.isFinite(custo)||custo<0)) return alert("Informe um custo unitário válido (ou deixe em branco).");
+  if(custo!==null&&custo>0&&!confirm(`Cadastrar "${nome}" com custo de ${moedaBR(custo)} por ${un}?\n\nDepois de salvo, o custo NÃO poderá ser alterado.`)) return;
 
-  db.produtos.push({
+  const novo={
     id:id(),
     nome,
     cod,
@@ -684,7 +729,9 @@ function addProduto(){
     estoque,
     min,
     ideal
-  });
+  };
+  if(custo!==null&&custo>0)novo.custo=Math.round(custo*10000)/10000;
+  db.produtos.push(novo);
 
   document.getElementById("pNome").value="";
   document.getElementById("pCod").value="";
@@ -692,7 +739,8 @@ function addProduto(){
   document.getElementById("pEst").value=0;
   document.getElementById("pMin").value=0;
   if(document.getElementById("pIdeal"))document.getElementById("pIdeal").value=0;
-  registrarAuditoria("Produto","Cadastro de produto",`Produto: ${nome} · Estoque inicial: ${estoque} ${un} · Mínimo: ${min} ${un} · Ideal: ${ideal} ${un}`);
+  if(document.getElementById("pCusto"))document.getElementById("pCusto").value="";
+  registrarAuditoria("Produto","Cadastro de produto",`Produto: ${nome} · Estoque inicial: ${estoque} ${un} · Mínimo: ${min} ${un} · Ideal: ${ideal} ${un}${novo.custo?` · Custo: ${moedaBR(novo.custo)}`:''}`);
   save();
 }
 function updateReqUnit(){const p=db.produtos.find(x=>String(x.id)===String(rProd.value)); rUn.value=p?p.un:"";}
@@ -1316,6 +1364,7 @@ function cmvPeriodoDados(mes){
  return {porProduto};
 }
 
+let _cmvValores=null;
 function renderAnaliseCMV(){
  const mesEl=document.getElementById('cmvMes');
  if(!mesEl)return;
@@ -1366,6 +1415,38 @@ function renderAnaliseCMV(){
  const cats=Object.values(porCat).sort((a,b)=>a.cat.localeCompare(b.cat,'pt-BR'));
  const tabela=document.getElementById('cmvCategoriaTabela');
  if(tabela)tabela.innerHTML=cats.length?`<div class="product-table-wrap"><table><thead><tr><th>Categoria</th><th>Inicial</th><th>Entradas</th><th>Saídas</th><th>Consumo apurado</th><th>Desvio</th><th>Final</th><th>Diferença</th><th>CMV %</th></tr></thead><tbody>${cats.map(c=>{const disp=c.inicio+c.entradas;const pct=disp>0?(c.consumo/disp)*100:0;const consumoCat=Math.max(0,c.inicio+c.entradas-c.fim);const dif=consumoCat-c.saidas;return `<tr><td><strong>${esc(c.cat)}</strong></td><td>${formatQuantidade(c.inicio)}</td><td>${formatQuantidade(c.entradas)}</td><td>${formatQuantidade(c.saidas)}</td><td><strong>${formatQuantidade(consumoCat)}</strong></td><td><strong>${formatQuantidade(c.desvio)}</strong></td><td>${formatQuantidade(c.fim)}</td><td><strong>${formatQuantidade(dif)}</strong></td><td>${pct.toFixed(1).replace('.',',')}%</td></tr>`;}).join('')}</tbody><tfoot><tr><th>Total</th><th>${formatQuantidade(totalInicio)}</th><th>${formatQuantidade(totalEntradas)}</th><th>${formatQuantidade(saidaTotal)}</th><th>${formatQuantidade(consumoApurado)}</th><th>${formatQuantidade(desvioTotal)}</th><th>${formatQuantidade(totalFim)}</th><th>${formatQuantidade(diferencaEstoque)}</th><th>${cmvPct.toFixed(1).replace('.',',')}%</th></tr></table></div>`:'<div class="report-empty">Nenhum produto cadastrado para analisar.</div>';
+
+ // ===== CMV em reais (custo unitário atual de cada produto) =====
+ const _catDe=p=>String(p.categoria||'Sem categoria').trim()||'Sem categoria';
+ const valCat={};const _vc=cat=>valCat[cat]||(valCat[cat]={cat,inicio:0,compras:0,fim:0,consumo:0,saidas:0,desvio:0});
+ let vIni=0,vEnt=0,vFim=0,vCons=0,vSaida=0,vDesv=0,semCusto=0;
+ itens.forEach(x=>{
+   const c=custoProd(x.p),k=_vc(_catDe(x.p));
+   const consQ=Math.max(0,Number(x.inicio||0)+Number(x.entradas||0)-Number(x.fim||0));
+   if(!c){if(Number(x.inicio||0)>0||Number(x.entradas||0)>0||Number(x.fim||0)>0)semCusto++;return;}
+   const a=Number(x.inicio||0)*c,b=Number(x.entradas||0)*c,f=Number(x.fim||0)*c,q=consQ*c;
+   vIni+=a;vEnt+=b;vFim+=f;vCons+=q;k.inicio+=a;k.compras+=b;k.fim+=f;k.consumo+=q;
+ });
+ saidasRegistradas.forEach(m=>{
+   const x=porProduto[m.prodId];if(!x)return;const c=custoProd(x.p);if(!c)return;
+   const v=Number(m.qtd||0)*c,k=_vc(_catDe(x.p));vSaida+=v;k.saidas+=v;
+   if(movimentoEhDesvio(m)){vDesv+=v;k.desvio+=v;}
+ });
+ const vDisp=vIni+vEnt,vPct=vDisp>0?(vCons/vDisp)*100:0,vDif=vCons-vSaida;
+ _cmvValores={mes,vIni,vEnt,vFim,vCons,vSaida,vDesv,vDif,vPct,semCusto,cats:Object.values(valCat).sort((a,b)=>a.cat.localeCompare(b.cat,'pt-BR'))};
+ const vCards=document.getElementById('cmvValorCards');
+ if(vCards)vCards.innerHTML=`
+ <div class="card cmv-stat-card"><span>Estoque inicial (R$)</span><div class="stat">${moedaBR(vIni)}</div><small>Valor no início do período</small></div>
+ <div class="card cmv-stat-card"><span>Compras / entradas (R$)</span><div class="stat">${moedaBR(vEnt)}</div><small>Valor das entradas do período</small></div>
+ <div class="card cmv-stat-card"><span>Estoque final (R$)</span><div class="stat">${moedaBR(vFim)}</div><small>Valor ao final do período</small></div>
+ <div class="card cmv-stat-card"><span>CMV (R$)</span><div class="stat">${moedaBR(vCons)}</div><small>Inicial + compras − final</small></div>
+ <div class="card cmv-stat-card"><span>Desvios (R$)</span><div class="stat">${moedaBR(vDesv)}</div><small>Valor dos desvios lançados</small></div>
+ <div class="card cmv-stat-card"><span>Diferença de estoque (R$)</span><div class="stat">${moedaBR(vDif)}</div><small>${vDif>=0?'Consumo não explicado pelas saídas':'Saídas acima do consumo apurado'}</small></div>
+ <div class="card cmv-stat-card cmv-percent-card"><span>CMV em valor</span><div class="stat">${vPct.toFixed(1).replace('.',',')}%</div><small>CMV (R$) ÷ valor disponível</small></div>`;
+ const vAviso=document.getElementById('cmvValorAviso');
+ if(vAviso)vAviso.innerHTML=semCusto?`⚠️ ${semCusto} produto(s) com movimento ou saldo no período estão <b>sem custo cadastrado</b> e ficaram de fora dos valores. Cadastre o custo na aba Produtos (filtro "Sem custo cadastrado").`:'';
+ const vTab=document.getElementById('cmvValorTabela');
+ if(vTab)vTab.innerHTML=_cmvValores.cats.length?`<div class="product-table-wrap"><table><thead><tr><th>Categoria</th><th>Estoque inicial</th><th>Compras</th><th>Estoque final</th><th>CMV</th><th>Desvio</th><th>CMV %</th></tr></thead><tbody>${_cmvValores.cats.map(c=>{const d=c.inicio+c.compras;const p=d>0?(c.consumo/d)*100:0;return `<tr><td><strong>${esc(c.cat)}</strong></td><td>${moedaBR(c.inicio)}</td><td>${moedaBR(c.compras)}</td><td>${moedaBR(c.fim)}</td><td><strong>${moedaBR(c.consumo)}</strong></td><td>${moedaBR(c.desvio)}</td><td>${p.toFixed(1).replace('.',',')}%</td></tr>`;}).join('')}</tbody><tfoot><tr><th>Total</th><th>${moedaBR(vIni)}</th><th>${moedaBR(vEnt)}</th><th>${moedaBR(vFim)}</th><th>${moedaBR(vCons)}</th><th>${moedaBR(vDesv)}</th><th>${vPct.toFixed(1).replace('.',',')}%</th></tr></tfoot></table></div>`:'<div class="report-empty">Nenhum produto cadastrado.</div>';
 
  const porSetor={Bar:0,Cozinha:0};
  desvios.forEach(m=>{const setor=setorMovimento(m);porSetor[setor]=(porSetor[setor]||0)+Number(m.qtd||0);});
@@ -1485,7 +1566,7 @@ function renderRelatorios(){
  const mes=document.getElementById('relatorioMes')?.value||mesAtualISO();const mov=(db.mov||[]).filter(m=>String(m.data||'').slice(0,7)===mes);const req=(db.req||[]).map(normalizeReq).filter(r=>String(r.dataISO||r.data||'').slice(0,7)===mes);const compras=(db.comprasEspeciais||[]).filter(x=>String(x.data||'').slice(0,7)===mes);const entradas=mov.filter(m=>m.tipo==='entrada').reduce((s,m)=>s+Number(m.qtd||0),0),saidas=mov.filter(m=>m.tipo==='saida').reduce((s,m)=>s+Number(m.qtd||0),0);const gastos=compras.reduce((s,x)=>s+Number(x.total||0),0);const baixo=db.produtos.filter(p=>Number(p.estoque)<=Number(p.min)).length;
  const cards=document.getElementById('relatorioCards');if(cards)cards.innerHTML=`<div class="card"><span>Produtos</span><div class="stat">${db.produtos.length}</div></div><div class="card"><span>Estoque baixo</span><div class="stat">${baixo}</div></div><div class="card"><span>Entradas</span><div class="stat">${entradas}</div></div><div class="card"><span>Saídas</span><div class="stat">${saidas}</div></div><div class="card"><span>Requisições</span><div class="stat">${req.length}</div></div><div class="card"><span>Compras especiais</span><div class="stat">${moedaBR(gastos)}</div></div>`;
  const sug=document.getElementById('sugestaoComprasTable');const arr=sugestoesCompra();if(sug)sug.innerHTML=arr.length?`<div class="product-table-wrap"><table><tr><th>Produto</th><th>Atual</th><th>Mínimo</th><th>Ideal</th><th>Sugerir compra</th><th>Unidade</th></tr>${arr.map(p=>`<tr><td>${esc(p.nome)}</td><td>${p.estoque}</td><td>${p.min}</td><td>${p.ideal}</td><td><strong>${p.sugerida}</strong></td><td>${esc(p.un)}</td></tr>`).join('')}</table></div>`:'<div class="report-empty">✅ Nenhum produto abaixo do estoque ideal.</div>';
- const est=document.getElementById('relatorioEstoque');if(est)est.innerHTML=`<div class="product-table-wrap"><table><tr><th>Produto</th><th>Categoria</th><th>Atual</th><th>Mínimo</th><th>Ideal</th><th>Status</th></tr>${db.produtos.slice().sort((a,b)=>String(a.nome).localeCompare(String(b.nome),'pt-BR')).map(p=>`<tr><td>${esc(p.nome)}</td><td>${esc(p.categoria||'-')}</td><td>${p.estoque} ${esc(p.un)}</td><td>${p.min}</td><td>${Number(p.ideal||0)}</td><td>${p.estoque<=p.min?'<span class="badge low">Baixo</span>':'<span class="badge ok">Normal</span>'}</td></tr>`).join('')}</table></div>`;
+ const est=document.getElementById('relatorioEstoque');if(est)est.innerHTML=`<div class="product-table-wrap"><table><tr><th>Produto</th><th>Categoria</th><th>Atual</th><th>Mínimo</th><th>Ideal</th><th>Custo unit.</th><th>Valor</th><th>Status</th></tr>${db.produtos.slice().sort((a,b)=>String(a.nome).localeCompare(String(b.nome),'pt-BR')).map(p=>`<tr><td>${esc(p.nome)}</td><td>${esc(p.categoria||'-')}</td><td>${p.estoque} ${esc(p.un)}</td><td>${p.min}</td><td>${Number(p.ideal||0)}</td><td>${temCusto(p)?moedaBR(p.custo):'—'}</td><td>${temCusto(p)?moedaBR(valorProd(p)):'—'}</td><td>${p.estoque<=p.min?'<span class="badge low">Baixo</span>':'<span class="badge ok">Normal</span>'}</td></tr>`).join('')}<tr><td colspan="6"><b>Valor total do estoque</b></td><td colspan="2"><b>${moedaBR(db.produtos.reduce((t,p)=>t+valorProd(p),0))}</b></td></tr></table></div>`;
  const rm=document.getElementById('relatorioMovimentos');if(rm)rm.innerHTML=mov.length?`<div class="product-table-wrap"><table><tr><th>Data</th><th>Produto</th><th>Tipo</th><th>Qtd.</th><th>Motivo</th></tr>${mov.slice().reverse().map(m=>`<tr><td>${esc(m.data)}</td><td>${esc(m.prod)}</td><td>${m.tipo==='entrada'?'Entrada':'Saída'}</td><td>${m.qtd} ${esc(m.un||'')}</td><td>${esc(m.motivo||'-')}</td></tr>`).join('')}</table></div>`:'<div class="report-empty">Nenhuma movimentação no mês selecionado.</div>';
  const rr=document.getElementById('relatorioRequisicoes');if(rr)rr.innerHTML=req.length?`<div class="product-table-wrap"><table><tr><th>Requisição</th><th>Setor</th><th>Solicitante</th><th>Status</th><th>Prioridade</th></tr>${req.map(r=>`<tr><td>${esc(r.numero)}</td><td>${esc(r.setor)}</td><td>${esc(r.sol)}</td><td>${esc(r.status)}</td><td>${esc(r.prioridade)}</td></tr>`).join('')}</table></div>`:'<div class="report-empty">Nenhuma requisição no mês selecionado.</div>';
  const rc=document.getElementById('relatorioCompras');if(rc)rc.innerHTML=compras.length?`<div class="product-table-wrap"><table><tr><th>Data</th><th>Tipo</th><th>Quantidade</th><th>Unidade</th><th>Total</th></tr>${compras.slice().reverse().map(x=>`<tr><td>${esc(x.data)}</td><td>${x.tipo==='suco'?'Suco de laranja':'Gelo'}</td><td>${x.qtd}</td><td>${esc(x.un)}</td><td>${moedaBR(x.total)}</td></tr>`).join('')}</table></div>`:'<div class="report-empty">Nenhuma compra especial no mês selecionado.</div>';
@@ -1762,13 +1843,13 @@ function montarRelatorio(tipo){
       const termo=(document.getElementById('buscaProduto')?.value||'').toLowerCase().trim(),filtro=document.getElementById('filtroProduto')?.value||'todos',cat=document.getElementById('filtroCategoriaProduto')?.value||'';
       const lista=db.produtos.filter(produtoVisivel).filter(p=>{
         const match=!termo||String(p.nome||'').toLowerCase().includes(termo)||String(p.cod||'').toLowerCase().includes(termo),baixo=p.estoque<=p.min;
-        return match&&(filtro==='todos'||(filtro==='baixo'&&baixo)||(filtro==='normal'&&!baixo))&&(!cat||(p.categoria||'')===cat);
+        return match&&(filtro==='todos'||(filtro==='baixo'&&baixo)||(filtro==='normal'&&!baixo)||(filtro==='semcusto'&&!temCusto(p)))&&(!cat||(p.categoria||'')===cat);
       }).sort(_ordNome);
       const baixos=lista.filter(p=>p.estoque<=p.min).length;
       return {...base,titulo:'Produtos cadastrados',arquivo:'produtos',meta:cat?[['Categoria',cat]]:[],
-        resumo:[['Produtos listados',lista.length,'num'],['Com estoque baixo',baixos,'num'],['Com estoque normal',lista.length-baixos,'num']],
-        secoes:[{nome:'Produtos',titulo:'Produtos',colunas:[{t:'Produto',tipo:'texto',larg:38},{t:'Código',tipo:'texto'},{t:'Categoria',tipo:'texto',larg:20},{t:'Unidade',tipo:'texto'},{t:'Estoque atual',tipo:'num'},{t:'Estoque mínimo',tipo:'num'},{t:'Estoque ideal',tipo:'num'},{t:'Status',tipo:'texto'}],
-          linhas:lista.map(p=>[p.nome,p.cod||'',p.categoria||'Sem categoria',p.un||'',Number(p.estoque)||0,Number(p.min)||0,Number(p.ideal||Math.max(Number(p.min)||0,(Number(p.min)||0)*2)),p.estoque<=p.min?'Estoque baixo':'Normal'])}]};
+        resumo:[['Produtos listados',lista.length,'num'],['Com estoque baixo',baixos,'num'],['Com estoque normal',lista.length-baixos,'num'],['Valor total em estoque',lista.reduce((t,p)=>t+valorProd(p),0),'moeda'],['Produtos sem custo',lista.filter(p=>!temCusto(p)).length,'num']],
+        secoes:[{nome:'Produtos',titulo:'Produtos',colunas:[{t:'Produto',tipo:'texto',larg:38},{t:'Código',tipo:'texto'},{t:'Categoria',tipo:'texto',larg:20},{t:'Unidade',tipo:'texto'},{t:'Estoque atual',tipo:'num'},{t:'Estoque mínimo',tipo:'num'},{t:'Estoque ideal',tipo:'num'},{t:'Custo unitário',tipo:'moeda'},{t:'Valor em estoque',tipo:'moeda'},{t:'Status',tipo:'texto'}],
+          linhas:lista.map(p=>[p.nome,p.cod||'',p.categoria||'Sem categoria',p.un||'',Number(p.estoque)||0,Number(p.min)||0,Number(p.ideal||Math.max(Number(p.min)||0,(Number(p.min)||0)*2)),temCusto(p)?custoProd(p):'',temCusto(p)?valorProd(p):'',p.estoque<=p.min?'Estoque baixo':'Normal'])}]};
     }
     case 'movimentos':{
       const filtro=(document.getElementById('filtroMovimento')?.value||'').trim().toLowerCase(),todos=Array.isArray(db.mov)?db.mov:[];
@@ -1842,9 +1923,11 @@ function montarRelatorio(tipo){
       renderAnaliseCMV();
       const resumo=[...document.querySelectorAll('#cmvCards .cmv-stat-card')].map(c=>{const v=(c.querySelector('.stat')?.textContent||'').trim(),n=_numerico(v);return [(c.querySelector('span')?.textContent||'').trim(),n!==null?n:v,n!==null?'num':'texto'];});
       const secoes=[];
+      const V=_cmvValores;if(V&&V.mes===mes){resumo.push(['Estoque inicial (R$)',V.vIni,'moeda'],['Compras / entradas (R$)',V.vEnt,'moeda'],['Estoque final (R$)',V.vFim,'moeda'],['CMV (R$)',V.vCons,'moeda'],['Desvios (R$)',V.vDesv,'moeda'],['Diferença de estoque (R$)',V.vDif,'moeda'],['CMV em valor (%)',Math.round(V.vPct*10)/10,'num'],['Produtos sem custo (fora dos valores)',V.semCusto,'num']);
+        secoes.push({nome:'CMV em reais',titulo:'CMV em reais por categoria',colunas:[{t:'Categoria',tipo:'texto',larg:24},{t:'Estoque inicial',tipo:'moeda'},{t:'Compras',tipo:'moeda'},{t:'Estoque final',tipo:'moeda'},{t:'CMV',tipo:'moeda'},{t:'Desvio',tipo:'moeda'}],linhas:V.cats.map(c=>[c.cat,c.inicio,c.compras,c.fim,c.consumo,c.desvio])});}
       [['cmvCategoriaTabela','CMV por categoria'],['cmvDesviosSetor','Desvios por setor']].forEach(([id,tit])=>{const t=document.querySelector('#'+id+' table');if(t)secoes.push(_secaoDeTabelaDOM(tit,t));});
       [['cmvDesvios','Desvios do CMV'],['cmvEspeciais','Compras especiais']].forEach(([id,tit])=>{const s=_secaoDeBlocosDOM(tit,document.getElementById(id));if(s)secoes.push(s);});
-      secoes.sort((a,b)=>['CMV por categoria','Desvios do CMV','Desvios por setor','Compras especiais'].indexOf(a.titulo)-['CMV por categoria','Desvios do CMV','Desvios por setor','Compras especiais'].indexOf(b.titulo));
+      secoes.sort((a,b)=>['CMV por categoria','CMV em reais por categoria','Desvios do CMV','Desvios por setor','Compras especiais'].indexOf(a.titulo)-['CMV por categoria','CMV em reais por categoria','Desvios do CMV','Desvios por setor','Compras especiais'].indexOf(b.titulo));
       return {...base,titulo:`Análise de CMV — ${m}/${y}`,arquivo:'cmv_'+mes,meta:[['Mês de referência',`${m}/${y}`]],resumo,secoes};
     }
     case 'malote':{return maloteRelatorioLista(maloteFiltrados().slice().reverse());}
