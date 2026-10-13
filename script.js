@@ -334,6 +334,29 @@ function removerCategoriaUniformes(){
   return mudou;
 }
 removerCategoriaUniformes();
+/* Cadastro único dos refrigerantes (pedido do usuário): categoria Refrigerantes, estoque mínimo 5.
+   Roda uma vez só (marcada em db.seedRefrigerantes1) e ignora nomes que já existem. */
+const REFRIGERANTES_BASE=[
+  ["CITRUS SCHWEPPES LT 350ML",63],["COCA-COLA GF 290ML",455],["COCA-COLA LATA 350ML",24],["COCA-COLA ZERO GF 290ML",890],
+  ["COCA-COLA ZERO LATA 350ML",22],["FANTA LARANJA GF 290ML",0],["FANTA LARANJA LATA 350ML",22],["FANTA UVA GF 290ML",4],
+  ["FANTA UVA LATA 350ML",3],["GUARANA DIET LT 350ML",53],["GUARANA GF 290ML",0],["GUARANA LATA",0],
+  ["H2O LIMÃO GF 500ML",37],["H2O LIMONETO",4],["PEPSI ZERO 350ML",0],["PEPSI ZERO BLACK 350ML",37],
+  ["SODA LT 350 ML",26],["SPRITE GF 290ML",78],["SPRITE LEMON FRESH 510ML",68],["TONICA DIET LT 350ML",11],["TONICA LT 350 ML",25]
+];
+function cadastrarRefrigerantesBase(){
+  if(db.seedRefrigerantes1)return false;
+  const chave=t=>String(t||"").trim().toLowerCase();
+  const existentes=new Set(db.produtos.map(p=>chave(p.nome)));
+  let n=0;
+  REFRIGERANTES_BASE.forEach(([nome,estoque])=>{
+    if(existentes.has(chave(nome)))return;
+    db.produtos.push({id:id(),nome,cod:"",un:"UN",categoria:"Refrigerantes",estoque,min:5,ideal:10});
+    n++;
+  });
+  db.seedRefrigerantes1=true;
+  if(n)registrarAuditoria("Produto","Cadastro em lote de refrigerantes",`${n} produto(s) · categoria Refrigerantes · mínimo 5 UN`);
+  return true;
+}
 const CATEGORIAS_PADRAO=["Camara Fria","Estoque Seco","Destilados","Limpeza","Refrigerantes","Cervejas e chopp"];
 const categoriasLegadas=[...db.produtos.map(p=>String(p.categoria||"").trim()).filter(Boolean)];
 db.categorias=[...new Set([...CATEGORIAS_PADRAO,...db.categorias.map(x=>String(x||"").trim()).filter(Boolean),...categoriasLegadas])].filter(c=>!categoriaExcluida(c)||categoriaEmUso(c));
@@ -523,6 +546,7 @@ function renderSaudacao(){
 }
 function render(){
  if(removerCategoriaUniformes())persist();
+ if(cadastrarRefrigerantesBase())persist();
  applyPermissions();
  renderSaudacao();
  renderExportacaoMenu();
