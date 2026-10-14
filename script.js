@@ -322,6 +322,8 @@ if(!Array.isArray(db.categorias))db.categorias=[];
 if(!Array.isArray(db.categoriasExcluidas))db.categoriasExcluidas=[];
 if(!Array.isArray(db.rnc))db.rnc=[];
 if(!Array.isArray(db.malotes))db.malotes=[];
+if(!Array.isArray(db.pedidosCompra))db.pedidosCompra=[];
+if(!Array.isArray(db.notasFiscais))db.notasFiscais=[];
 db.produtos.forEach(p=>{ if(!Number.isFinite(Number(p.ideal))) p.ideal=Math.max(Number(p.min)||0,(Number(p.min)||0)*2); });
 /* Remoção definitiva da categoria Uniformes (pedido do usuário): apaga a categoria e os produtos dela.
    O histórico de movimentações e inventários é mantido, igual à exclusão normal de produto. */
@@ -564,6 +566,7 @@ function render(){
  renderPendencias();
  renderRnc();
  renderMalote();
+ renderComprasENotas();
  renderMovimentos();
   renderNotas();
   renderComprasEspeciais();
@@ -1047,7 +1050,7 @@ function renderMovimentos(){
  if(movCount) movCount.textContent=lista.length+(lista.length===1?" movimento":" movimentos");
  const box=document.getElementById("movTable");
  if(!box)return;
- box.innerHTML=lista.length?`<div class="mov-list">${lista.slice().reverse().map(m=>{const entrada=m.tipo==="entrada";return `<div class="mov-card ${entrada?'mov-entry':'mov-exit'}"><div class="mov-card-top"><div><div class="mov-product">${esc(m.prod)}</div><div class="mov-meta">${esc(formatDateBR(m.data))} · ${esc(m.un||'un.')}</div></div><span class="mov-badge ${entrada?'mov-badge-entry':'mov-badge-exit'}">${entrada?'↑ Entrada':'↓ Saída'}</span></div><div class="mov-details"><div class="mov-detail">Quantidade<strong>${m.qtd} ${esc(m.un||'')}</strong></div><div class="mov-detail">Motivo<strong>${esc(m.motivo||'Sem motivo informado')}</strong></div><div class="mov-detail">Ação<strong>${m.reqId||m.origem==="requisicao"?'🔒 Requisição entregue':(canDelete()?`<button class="mov-delete" onclick="delMov('${m.id}')">Apagar</button>`:'🔒 Sem permissão')}</strong></div></div></div>`}).join('')}</div>`:"<div class='mov-empty'>Nenhuma movimentação encontrada para este filtro.</div>";
+ box.innerHTML=lista.length?`<div class="mov-list">${lista.slice().reverse().map(m=>{const entrada=m.tipo==="entrada";return `<div class="mov-card ${entrada?'mov-entry':'mov-exit'}"><div class="mov-card-top"><div><div class="mov-product">${esc(m.prod)}</div><div class="mov-meta">${esc(formatDateBR(m.data))} · ${esc(m.un||'un.')}</div></div><span class="mov-badge ${entrada?'mov-badge-entry':'mov-badge-exit'}">${entrada?'↑ Entrada':'↓ Saída'}</span></div><div class="mov-details"><div class="mov-detail">Quantidade<strong>${m.qtd} ${esc(m.un||'')}</strong></div><div class="mov-detail">Motivo<strong>${esc(m.motivo||'Sem motivo informado')}</strong></div><div class="mov-detail">Ação<strong>${m.nfId?'🔒 Lançada por NF':m.reqId||m.origem==="requisicao"?'🔒 Requisição entregue':(canDelete()?`<button class="mov-delete" onclick="delMov('${m.id}')">Apagar</button>`:'🔒 Sem permissão')}</strong></div></div></div>`}).join('')}</div>`:"<div class='mov-empty'>Nenhuma movimentação encontrada para este filtro.</div>";
 }
 function popularCategoriasReqEmp(){
  const cats=[...new Set((db.produtos||[]).map(p=>String(p.categoria||"Sem categoria").trim()||"Sem categoria"))].sort((a,b)=>a.localeCompare(b,"pt-BR"));
@@ -1620,6 +1623,7 @@ function delMov(i){
  if(!canDelete()){denyDelete();return;}
  const m=db.mov.find(x=>String(x.id)===String(i));
  if(!m)return;
+ if(m.nfId)return alert('Esta entrada foi gerada por uma nota fiscal. Para desfazer, exclua a NF na aba Notas Fiscais.');
  const reqMove=isReqMovement(m);
  if(reqMove&&!isAdmin())return alert("Somente o Administrador pode apagar movimentações geradas por requisições.");
  if(reqMove){
@@ -1746,9 +1750,9 @@ function deleteAllMovements(){
  const qtd=db.mov.length;
  if(!confirm("ATENÇÃO!\n\nTodas as entradas e saídas serão apagadas e seus efeitos serão revertidos no estoque.\n\nAs requisições que tiveram movimentações apagadas voltarão para Pendente.\n\nTotal de movimentações: "+qtd+"\n\nEsta ação não pode ser desfeita."))return;
  const reqIds=[...new Set(db.mov.filter(isReqMovement).map(m=>m.reqId).filter(Boolean))];
- db.mov.slice().forEach(reverseMovement);
+ db.mov.filter(m=>!m.nfId).forEach(reverseMovement);
  reqIds.forEach(reopenRequisition);
- db.mov=[];
+ db.mov=db.mov.filter(m=>m.nfId);
  registrarAuditoria("Sistema","Apagou todas as movimentações",`Total: ${qtd}`);
  save(); render(); alert("Todas as entradas e saídas foram apagadas e o estoque foi ajustado.");
 }
@@ -1757,10 +1761,247 @@ function resetData(){
  if(!canDelete()){denyDelete();return;}
  if(!confirm("Isso apagará todos os produtos, requisições, movimentações e anotações. O usuário administrador principal será mantido. Continuar?"))return;
  const admin=db.users.find(u=>u.login==="admin")||{id:id(),nome:"Administrador",login:"admin",senha:"",perfil:"Administrador"};
- db={produtos:[],req:[],mov:[],users:[admin],anotacoes:[],comprasEspeciais:[],auditoria:[],inventarios:[],emprestimos:[],destilados:[],drinks:[],categorias:[...CATEGORIAS_PADRAO]};
+ db={produtos:[],req:[],mov:[],users:[admin],anotacoes:[],comprasEspeciais:[],auditoria:[],inventarios:[],emprestimos:[],destilados:[],drinks:[],categorias:[...CATEGORIAS_PADRAO],pedidosCompra:[],notasFiscais:[]};
  db.auditoria.unshift({id:id(),dataHora:new Date().toISOString(),data:hojeISO(),usuario:usuarioAtualNome(),tipo:"Sistema",acao:"Resetou dados",detalhes:"Todos os dados operacionais foram removidos."});
  save();
 }
+/* =========================================================
+   PEDIDOS DE COMPRA + NOTAS FISCAIS (entrada automática no estoque)
+   - A unidade de medida sempre vem do produto cadastrado (campo travado).
+   - Ao lançar a NF: soma no estoque, gera a entrada em Entradas/Saídas
+     e dá baixa no pedido de compra vinculado (Aberto → Parcial → Recebido).
+   ========================================================= */
+var pcItens=[],nfItens=[];
+function pcLista(){if(!Array.isArray(db.pedidosCompra))db.pedidosCompra=[];return db.pedidosCompra;}
+function nfLista(){if(!Array.isArray(db.notasFiscais))db.notasFiscais=[];return db.notasFiscais;}
+function qtdTxt(v){return String(arred(v)).replace('.',',');}
+function pcProximoNumero(){
+  const nums=pcLista().map(p=>parseInt(String(p.numero||'').replace(/\D/g,''),10)).filter(Number.isFinite);
+  return 'PC-'+String((nums.length?Math.max(...nums):0)+1).padStart(4,'0');
+}
+function pcCalcStatus(p){
+  if(p.status==='Cancelado')return 'Cancelado';
+  const its=p.itens||[];
+  if(its.length&&its.every(i=>(Number(i.recebido)||0)>=Number(i.qtd)))return 'Recebido';
+  if(its.some(i=>(Number(i.recebido)||0)>0))return 'Parcial';
+  return 'Aberto';
+}
+function pcBadgeClasse(s){return {Aberto:'status-pendente',Parcial:'status-separando',Recebido:'status-entregue',Cancelado:'priority-urgente'}[s]||'status-pendente';}
+function irParaAba(v){const b=document.querySelector(`nav button[data-view="${v}"]`);if(b)b.click();}
+
+function atualizarUnCompra(pref){
+  const sel=document.getElementById(pref+'Prod'),un=document.getElementById(pref+'Un');
+  if(!sel||!un)return;
+  const p=db.produtos.find(x=>String(x.id)===String(sel.value));
+  un.value=p?(p.un||'UN'):'';
+}
+function filtrarProdutosCompra(pref){
+  filtrarProdutosPorCategoria(pref+'Categoria',pref+'Prod');
+  atualizarUnCompra(pref);
+}
+function popularSelectsCompras(){
+  const cats=[...new Set((db.produtos||[]).map(p=>String(p.categoria||'Sem categoria').trim()||'Sem categoria'))].sort((a,b)=>a.localeCompare(b,'pt-BR'));
+  ['pcCategoria','nfCategoria'].forEach(i=>{
+    const cs=document.getElementById(i);if(!cs)return;
+    const atual=cs.value;
+    cs.innerHTML='<option value="">Todas as categorias</option>'+cats.map(c=>`<option value="${esc(c)}">${esc(c)}</option>`).join('');
+    if(cats.includes(atual))cs.value=atual;
+  });
+  filtrarProdutosCompra('pc');filtrarProdutosCompra('nf');
+  const forn=new Set();
+  pcLista().forEach(p=>p.fornecedor&&forn.add(p.fornecedor));
+  nfLista().forEach(n=>n.fornecedor&&forn.add(n.fornecedor));
+  (db.malotes||[]).forEach(m=>(m.nfs||[]).forEach(n=>n.fornecedor&&forn.add(n.fornecedor)));
+  const dl=document.getElementById('comprasFornecedores');
+  if(dl)dl.innerHTML=[...forn].sort((a,b)=>a.localeCompare(b,'pt-BR')).map(f=>`<option value="${esc(f)}"></option>`).join('');
+  const sp=document.getElementById('nfPedido');
+  if(sp){
+    const atual=sp.value;
+    const abertos=pcLista().filter(p=>['Aberto','Parcial'].includes(pcCalcStatus(p)));
+    sp.innerHTML='<option value="">Sem pedido vinculado</option>'+abertos.map(p=>`<option value="${p.id}">${esc(p.numero)} · ${esc(p.fornecedor)} (${pcCalcStatus(p)})</option>`).join('');
+    if(abertos.some(p=>String(p.id)===String(atual)))sp.value=atual;
+  }
+}
+
+/* ---------- Pedido de compra ---------- */
+function pcAddItem(){
+  if(!canEditStock())return denyOperate();
+  const p=db.produtos.find(x=>String(x.id)===String(document.getElementById('pcProd').value));
+  const q=Number(document.getElementById('pcQtd').value);
+  if(!p||!Number.isFinite(q)||q<=0)return alert('Selecione o produto e informe uma quantidade válida.');
+  const un=p.un||'UN',ex=pcItens.find(x=>String(x.prodId)===String(p.id));
+  if(ex){ex.qtd=arred(ex.qtd+q);ex.un=un;}else pcItens.push({prodId:p.id,prod:p.nome,qtd:q,un});
+  document.getElementById('pcQtd').value=1;
+  pcRenderDraft();
+}
+function pcRenderDraft(){
+  const box=document.getElementById('pcDraftItems');if(!box)return;
+  if(!pcItens.length){box.innerHTML='<p class="muted">Nenhum item adicionado ao pedido.</p>';return;}
+  box.innerHTML=pcItens.map((it,i)=>`<div class="req-draft-item"><div><b>${esc(it.prod)}</b><small>${qtdTxt(it.qtd)} ${esc(it.un)}</small></div><button class="req-draft-remove" type="button" onclick="pcItens.splice(${i},1);pcRenderDraft()">Remover</button></div>`).join('');
+}
+function pcSalvar(){
+  if(!canEditStock())return denyOperate();
+  const forn=document.getElementById('pcForn').value.trim();
+  if(!forn)return alert('Informe o fornecedor.');
+  if(!pcItens.length)return alert('Adicione pelo menos um produto ao pedido.');
+  const ped={id:id(),numero:pcProximoNumero(),data:now(),dataISO:hojeISO(),fornecedor:forn,previsao:document.getElementById('pcPrevisao').value||'',obs:document.getElementById('pcObs').value.trim(),itens:pcItens.map(x=>({...x,recebido:0})),status:'Aberto',usuario:usuarioAtualNome()};
+  pcLista().push(ped);
+  registrarAuditoria('Compra','Criou pedido de compra',`${ped.numero} · ${forn} · ${ped.itens.length} item(s)`);
+  pcItens=[];
+  ['pcForn','pcPrevisao','pcObs'].forEach(i=>{document.getElementById(i).value='';});
+  document.getElementById('pcQtd').value=1;
+  pcRenderDraft();
+  save();
+}
+function pcCancelar(i){
+  if(!canEditStock())return denyOperate();
+  const p=pcLista().find(x=>String(x.id)===String(i));if(!p)return;
+  if((p.itens||[]).some(it=>(Number(it.recebido)||0)>0))return alert('Este pedido já tem itens recebidos por NF e não pode ser cancelado.');
+  if(!confirm(`Cancelar o pedido ${p.numero}?`))return;
+  p.status='Cancelado';
+  registrarAuditoria('Compra','Cancelou pedido de compra',`${p.numero} · ${p.fornecedor}`);
+  save();
+}
+function pcExcluir(i){
+  if(!canDelete())return denyDelete();
+  const p=pcLista().find(x=>String(x.id)===String(i));if(!p)return;
+  if(nfLista().some(n=>String(n.pedidoId)===String(p.id)))return alert('Existem notas fiscais vinculadas a este pedido. Exclua as notas primeiro.');
+  if(!confirm(`Excluir o pedido ${p.numero}?`))return;
+  db.pedidosCompra=pcLista().filter(x=>String(x.id)!==String(i));
+  registrarAuditoria('Compra','Excluiu pedido de compra',`${p.numero} · ${p.fornecedor}`);
+  save();
+}
+function pcLancarNf(i){
+  if(!canEditStock())return denyOperate();
+  irParaAba('notasfiscais');
+  popularSelectsCompras();
+  document.getElementById('nfPedido').value=String(i);
+  nfCarregarPedido();
+}
+function renderCompras(){
+  const box=document.getElementById('pcList');if(!box)return;
+  const lista=pcLista();
+  document.getElementById('pcCount').textContent=lista.length;
+  document.getElementById('pcAbertos').textContent=lista.filter(p=>['Aberto','Parcial'].includes(pcCalcStatus(p))).length;
+  const q=semAcento(document.getElementById('pcBusca')?.value||''),st=document.getElementById('pcStatusFiltro')?.value||'';
+  const filtrados=lista.filter(p=>{
+    const s=pcCalcStatus(p);
+    if(st&&s!==st)return false;
+    if(!q)return true;
+    return semAcento([p.numero,p.fornecedor,p.obs,...(p.itens||[]).map(i=>i.prod)].join(' ')).includes(q);
+  }).slice().reverse();
+  if(!filtrados.length){box.innerHTML='<div class="req-empty">Nenhum pedido de compra encontrado.</div>';return;}
+  box.innerHTML=filtrados.map(p=>{
+    const s=pcCalcStatus(p);
+    const itens=(p.itens||[]).map(it=>{const rec=Number(it.recebido)||0;return `<div class="req-meta">• ${esc(it.prod)}: <b>${qtdTxt(rec)}</b> de <b>${qtdTxt(it.qtd)}</b> ${esc(it.un)} recebido(s)</div>`;}).join('');
+    const nfs=nfLista().filter(n=>String(n.pedidoId)===String(p.id)).map(n=>'NF '+n.numero).join(', ');
+    const btns=[];
+    if(['Aberto','Parcial'].includes(s)&&canEditStock())btns.push(`<button type="button" class="green" onclick="pcLancarNf('${p.id}')">Lançar NF</button>`);
+    if(s==='Aberto'&&canEditStock())btns.push(`<button type="button" class="secondary" onclick="pcCancelar('${p.id}')">Cancelar pedido</button>`);
+    if(canDelete())btns.push(`<button type="button" class="special-delete" onclick="pcExcluir('${p.id}')">Excluir</button>`);
+    return `<div class="req-card" style="cursor:default"><div class="req-card-top"><div><div class="req-code">${esc(p.numero)}</div><div class="req-meta">${esc(p.fornecedor)} · ${esc(formatDateBR(p.dataISO))}${p.previsao?' · Previsão: '+esc(formatDateBR(p.previsao)):''}</div></div><span class="req-badge ${pcBadgeClasse(s)}">${s}</span></div><div style="margin-top:10px">${itens}</div>${p.obs?`<div class="req-bottom">Obs.: ${esc(p.obs)}</div>`:''}${nfs?`<div class="req-bottom">Notas: ${esc(nfs)}</div>`:''}${btns.length?`<div class="actions" style="margin-top:12px">${btns.join('')}</div>`:''}</div>`;
+  }).join('');
+}
+
+/* ---------- Nota fiscal ---------- */
+function nfCarregarPedido(){
+  const pid=document.getElementById('nfPedido').value;
+  if(!pid)return;
+  const ped=pcLista().find(x=>String(x.id)===String(pid));if(!ped)return;
+  if(nfItens.length&&!confirm('Substituir os itens já adicionados pelos itens pendentes do pedido '+ped.numero+'?')){return;}
+  const forn=document.getElementById('nfForn');if(!forn.value.trim())forn.value=ped.fornecedor||'';
+  nfItens=(ped.itens||[]).map(it=>{
+    const pend=arred(Number(it.qtd)-(Number(it.recebido)||0));
+    const p=db.produtos.find(x=>String(x.id)===String(it.prodId));
+    return pend>0&&p?{prodId:p.id,prod:p.nome,qtd:pend,un:p.un||'UN',valorUnit:0}:null;
+  }).filter(Boolean);
+  nfRenderDraft();
+}
+function nfAddItem(){
+  if(!canEditStock())return denyOperate();
+  const p=db.produtos.find(x=>String(x.id)===String(document.getElementById('nfProd').value));
+  const q=Number(document.getElementById('nfQtd').value),v=Number(document.getElementById('nfValor').value)||0;
+  if(!p||!Number.isFinite(q)||q<=0)return alert('Selecione o produto e informe uma quantidade válida.');
+  if(v<0)return alert('O valor unitário não pode ser negativo.');
+  const un=p.un||'UN',ex=nfItens.find(x=>String(x.prodId)===String(p.id));
+  if(ex){ex.qtd=arred(ex.qtd+q);ex.un=un;if(v)ex.valorUnit=v;}else nfItens.push({prodId:p.id,prod:p.nome,qtd:q,un,valorUnit:v});
+  document.getElementById('nfQtd').value=1;document.getElementById('nfValor').value='';
+  nfRenderDraft();
+}
+function nfTotal(itens){return Math.round((itens||[]).reduce((s,i)=>s+(Number(i.qtd)||0)*(Number(i.valorUnit)||0),0)*100)/100;}
+function nfRenderDraft(){
+  const box=document.getElementById('nfDraftItems');if(!box)return;
+  if(!nfItens.length){box.innerHTML='<p class="muted">Nenhum item adicionado à nota.</p>';return;}
+  const total=nfTotal(nfItens);
+  box.innerHTML=nfItens.map((it,i)=>`<div class="req-draft-item"><div><b>${esc(it.prod)}</b><small>${qtdTxt(it.qtd)} ${esc(it.un)}${it.valorUnit?' · '+moedaBR(it.valorUnit)+' cada':''}</small></div><button class="req-draft-remove" type="button" onclick="nfItens.splice(${i},1);nfRenderDraft()">Remover</button></div>`).join('')+(total>0?`<div class="special-total-preview">Total da nota: <strong>${moedaBR(total)}</strong></div>`:'');
+}
+function nfLimparForm(){
+  nfItens=[];
+  ['nfNum','nfForn','nfEmissao','nfVenc','nfValor'].forEach(i=>{document.getElementById(i).value='';});
+  document.getElementById('nfEmissao').value=hojeISO();
+  document.getElementById('nfQtd').value=1;
+  document.getElementById('nfPedido').value='';
+  nfRenderDraft();
+}
+function nfSalvar(){
+  if(!canEditStock())return denyOperate();
+  const numero=document.getElementById('nfNum').value.trim(),forn=document.getElementById('nfForn').value.trim();
+  const emissao=document.getElementById('nfEmissao').value,venc=document.getElementById('nfVenc').value,pid=document.getElementById('nfPedido').value;
+  if(!numero)return alert('Informe o número da NF.');
+  if(!forn)return alert('Informe o fornecedor.');
+  if(!emissao)return alert('Informe a data de emissão.');
+  if(!nfItens.length)return alert('Adicione pelo menos um item à nota.');
+  if(nfLista().some(n=>semAcento(n.numero)===semAcento(numero)&&semAcento(n.fornecedor)===semAcento(forn)))return alert('Esta NF deste fornecedor já foi lançada.');
+  const ped=pid?pcLista().find(x=>String(x.id)===String(pid)):null;
+  if(pid&&!ped)return alert('Pedido de compra não encontrado.');
+  if(nfItens.some(it=>!db.produtos.find(x=>String(x.id)===String(it.prodId))))return alert('Um dos produtos da nota não existe mais no cadastro. Remova-o e tente novamente.');
+  if(!confirm(`Lançar a NF ${numero}?\n\n${nfItens.length} item(ns) serão somados ao estoque.`))return;
+  const nf={id:id(),numero,fornecedor:forn,emissao,vencimento:venc,pedidoId:ped?ped.id:'',pedidoNumero:ped?ped.numero:'',itens:[],total:0,dataISO:hojeISO(),data:now(),usuario:usuarioAtualNome()};
+  nfItens.forEach(it=>{
+    const p=db.produtos.find(x=>String(x.id)===String(it.prodId));
+    const q=Number(it.qtd);
+    p.estoque=arred((+p.estoque||0)+q);
+    db.mov.push({id:id(),data:hojeISO(),prodId:p.id,prod:p.nome,tipo:'entrada',qtd:q,un:p.un,motivo:`NF ${numero} · ${forn}`,setor:'',classificacao:'consumo',nfId:nf.id,origem:'nota_fiscal'});
+    nf.itens.push({prodId:p.id,prod:p.nome,qtd:q,un:p.un||'UN',valorUnit:Number(it.valorUnit)||0});
+    if(ped){const pi=(ped.itens||[]).find(x=>String(x.prodId)===String(p.id));if(pi)pi.recebido=arred((Number(pi.recebido)||0)+q);}
+  });
+  nf.total=nfTotal(nf.itens);
+  nfLista().push(nf);
+  if(ped)ped.status=pcCalcStatus(ped);
+  registrarAuditoria('Compra','Lançou nota fiscal',`NF ${numero} · ${forn} · ${nf.itens.length} item(s)${ped?' · Pedido '+ped.numero+' ('+ped.status+')':''}`);
+  nfLimparForm();
+  save();
+  alert(`✅ NF ${numero} lançada. Estoque atualizado${ped?' e pedido '+ped.numero+' marcado como '+ped.status:''}.`);
+}
+function nfExcluir(i){
+  if(!canDelete())return denyDelete();
+  const nf=nfLista().find(x=>String(x.id)===String(i));if(!nf)return;
+  if(!confirm(`Excluir a NF ${nf.numero}?\n\nO estoque será revertido${nf.pedidoNumero?' e o pedido '+nf.pedidoNumero+' voltará a refletir o que falta receber':''}.`))return;
+  db.mov.filter(m=>String(m.nfId||'')===String(nf.id)).forEach(reverseMovement);
+  db.mov=db.mov.filter(m=>String(m.nfId||'')!==String(nf.id));
+  const ped=nf.pedidoId?pcLista().find(x=>String(x.id)===String(nf.pedidoId)):null;
+  if(ped){
+    (nf.itens||[]).forEach(it=>{const pi=(ped.itens||[]).find(x=>String(x.prodId)===String(it.prodId));if(pi)pi.recebido=Math.max(0,arred((Number(pi.recebido)||0)-Number(it.qtd)));});
+    ped.status=pcCalcStatus(ped);
+  }
+  db.notasFiscais=nfLista().filter(x=>String(x.id)!==String(i));
+  registrarAuditoria('Compra','Excluiu nota fiscal',`NF ${nf.numero} · ${nf.fornecedor}`);
+  save();
+}
+function renderNotasFiscais(){
+  const box=document.getElementById('nfList');if(!box)return;
+  const lista=nfLista();
+  document.getElementById('nfCount').textContent=lista.length;
+  const q=semAcento(document.getElementById('nfBusca')?.value||'');
+  const filtrados=lista.filter(n=>!q||semAcento([n.numero,n.fornecedor,n.pedidoNumero,...(n.itens||[]).map(i=>i.prod)].join(' ')).includes(q)).slice().reverse();
+  if(!filtrados.length){box.innerHTML='<div class="req-empty">Nenhuma nota fiscal lançada.</div>';return;}
+  box.innerHTML=filtrados.map(n=>{
+    const itens=(n.itens||[]).map(it=>`<div class="req-meta">• ${esc(it.prod)}: <b>${qtdTxt(it.qtd)} ${esc(it.un)}</b>${it.valorUnit?' · '+moedaBR(it.valorUnit)+' cada':''}</div>`).join('');
+    return `<div class="req-card" style="cursor:default"><div class="req-card-top"><div><div class="req-code">NF ${esc(n.numero)}</div><div class="req-meta">${esc(n.fornecedor)} · Emissão: ${esc(formatDateBR(n.emissao))}${n.vencimento?' · Venc.: '+esc(formatDateBR(n.vencimento)):''}</div></div>${n.pedidoNumero?`<span class="req-badge status-separando">${esc(n.pedidoNumero)}</span>`:''}</div><div style="margin-top:10px">${itens}</div>${n.total>0?`<div class="req-bottom">Total: <b>${moedaBR(n.total)}</b></div>`:''}${canDelete()?`<div class="actions" style="margin-top:12px"><button type="button" class="special-delete" onclick="nfExcluir('${n.id}')">Excluir NF</button></div>`:''}</div>`;
+  }).join('');
+}
+function renderComprasENotas(){popularSelectsCompras();renderCompras();renderNotasFiscais();pcRenderDraft();nfRenderDraft();}
+
 /* =========================================================
    EXPORTAÇÃO (Excel .xlsx e PDF) + APLICATIVO INSTALÁVEL
    ========================================================= */
@@ -2437,6 +2678,7 @@ setInterval(renderSaudacao,60000);
 console.info("O Estoquista iniciado: dados locais carregados com sucesso.");
 if(document.getElementById("mData")) document.getElementById("mData").value=new Date().toISOString().slice(0,10);
 if(document.getElementById("eData")) document.getElementById("eData").value=hojeISO();
+if(document.getElementById("nfEmissao")) document.getElementById("nfEmissao").value=hojeISO();
 updateEmprestimoUnit();renderEmprestimoDraft();maloteInit();
 if(document.getElementById("inventarioData")) document.getElementById("inventarioData").value=hojeISO();
 if(document.getElementById("relatorioMes")) document.getElementById("relatorioMes").value=mesAtualISO();

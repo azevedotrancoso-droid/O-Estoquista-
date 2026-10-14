@@ -67,7 +67,7 @@ function toggleLoginPass(){
 <header aria-label="O Estoquista"><div class="brand"><span class="brand-icon" aria-hidden="true"><img src="logo-mark.png" alt="" width="26" height="31"></span><span>O Estoquista</span></div><small>Controle de estoque,<br>requisições, entradas e saídas</small></header>
 <nav id="nav">
 <button data-view="inicio" class="active">🏠 Início</button><button data-view="produtos">📦 Produtos</button>
-<button data-view="requisicoes">📋 Requisições</button><button data-view="pendencias">📌 Pendências</button><button data-view="anotacoes">📝 Anotações</button><button data-view="movimentos">🔄 Entradas/Saídas</button><button data-view="suco">🍊 Suco de Laranja</button><button data-view="gelo">🧊 Gelo</button><button data-view="bebidas">🍸 Bebidas</button><button data-view="inventario">📋 Inventário</button><button data-view="rnc"><span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M6 3h8l4 4v14H6z"/><path d="M14 3v4h4"/><path d="M12 11v4M12 18h.01"/></svg></span><span>RNC</span></button><button data-view="malote"><span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="3" y="6" width="18" height="13" rx="2"/><path d="m3 8 9 6 9-6"/></svg></span><span>Malote NF</span></button><button data-view="cmv"><span class="nav-icon nav-icon-cmv" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="3.5" y="3.5" width="17" height="17" rx="2"/><path d="M7 16l3.2-3.6 2.7 2.1L17 9"/><path d="M17 9h-3M17 9v3"/></svg></span><span>Análise de CMV</span></button><button data-view="relatorios" data-admin-only="1">📊 Relatórios</button><button data-view="auditoria" data-admin-only="1">🛡️ Auditoria</button>
+<button data-view="requisicoes">📋 Requisições</button><button data-view="pendencias">📌 Pendências</button><button data-view="anotacoes">📝 Anotações</button><button data-view="movimentos">🔄 Entradas/Saídas</button><button data-view="compras">🛒 Pedidos de Compra</button><button data-view="notasfiscais">🧾 Notas Fiscais</button><button data-view="suco">🍊 Suco de Laranja</button><button data-view="gelo">🧊 Gelo</button><button data-view="bebidas">🍸 Bebidas</button><button data-view="inventario">📋 Inventário</button><button data-view="rnc"><span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M6 3h8l4 4v14H6z"/><path d="M14 3v4h4"/><path d="M12 11v4M12 18h.01"/></svg></span><span>RNC</span></button><button data-view="malote"><span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="3" y="6" width="18" height="13" rx="2"/><path d="m3 8 9 6 9-6"/></svg></span><span>Malote NF</span></button><button data-view="cmv"><span class="nav-icon nav-icon-cmv" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="3.5" y="3.5" width="17" height="17" rx="2"/><path d="M7 16l3.2-3.6 2.7 2.1L17 9"/><path d="M17 9h-3M17 9v3"/></svg></span><span>Análise de CMV</span></button><button data-view="relatorios" data-admin-only="1">📊 Relatórios</button><button data-view="auditoria" data-admin-only="1">🛡️ Auditoria</button>
 <button data-view="usuarios" data-admin-only="1">👤 Usuários</button><button data-view="menu">⚙️ Menu</button>
 </nav>
 <main>
@@ -175,6 +175,62 @@ function toggleLoginPass(){
 <div class="mov-list-card-head"><div><h3>Histórico de movimentações</h3><span id="movCountLabel"></span></div>
 <div class="mov-filter"><label for="filtroMovimento">Filtrar por</label><select id="filtroMovimento" onchange="renderMovimentos()"><option value="">Todos</option><option value="Perda">Perda</option><option value="Requisição">Requisição</option><option value="Empréstimo">Empréstimo</option></select></div></div>
 <div id="movTable"></div></div></section>
+
+<section id="compras" class="view">
+<div class="req-page-head"><div><h2>🛒 Pedidos de Compra</h2><div class="req-count"><span id="pcCount">0</span> pedido(s) · <span id="pcAbertos">0</span> em aberto</div></div></div>
+<div class="card req-new-card">
+<h3>Novo pedido de compra</h3>
+<div class="grid">
+<div><label>Fornecedor</label><input id="pcForn" list="comprasFornecedores" maxlength="80" placeholder="Nome do fornecedor" autocomplete="off"><datalist id="comprasFornecedores"></datalist></div>
+<div><label>Previsão de entrega</label><input id="pcPrevisao" type="date"></div>
+<div><label>Categoria</label><select id="pcCategoria" onchange="filtrarProdutosCompra('pc')"></select></div>
+<div><label>Produto</label><select id="pcProd" onchange="atualizarUnCompra('pc')"></select></div>
+<div><label>Quantidade</label><input id="pcQtd" type="number" min="0.001" step="any" value="1" inputmode="decimal"></div>
+<div><label>Unidade de medida</label><input id="pcUn" type="text" readonly placeholder="Automática pelo produto"></div>
+</div>
+<div style="margin-top:10px"><label>Observação (opcional)</label><input id="pcObs" maxlength="200" placeholder="Ex.: entregar pela manhã"></div>
+<div class="actions"><button type="button" data-stock-action="1" onclick="pcAddItem()">Adicionar item</button><button type="button" class="green" data-stock-action="1" onclick="pcSalvar()">Criar pedido</button></div>
+<div id="pcDraftItems" class="req-items-box"></div>
+</div>
+<div class="card req-filter-card">
+<input id="pcBusca" placeholder="Buscar pedido, fornecedor ou produto..." oninput="renderCompras()">
+<select id="pcStatusFiltro" onchange="renderCompras()"><option value="">Todos status</option><option>Aberto</option><option>Parcial</option><option>Recebido</option><option>Cancelado</option></select>
+<button class="req-clear" type="button" onclick="document.getElementById('pcBusca').value='';document.getElementById('pcStatusFiltro').value='';renderCompras()">Limpar filtros</button>
+</div>
+<div id="pcList" class="req-list"></div>
+</section>
+
+<section id="notasfiscais" class="view">
+<div class="req-page-head"><div><h2>🧾 Notas Fiscais</h2><div class="req-count"><span id="nfCount">0</span> nota(s) lançada(s)</div></div></div>
+<div class="card req-new-card">
+<h3>Lançar nota fiscal de compra</h3>
+<div class="grid">
+<div><label>Número da NF</label><input id="nfNum" maxlength="40" placeholder="Ex.: 123456" inputmode="numeric" autocomplete="off"></div>
+<div><label>Fornecedor</label><input id="nfForn" list="comprasFornecedores" maxlength="80" placeholder="Nome do fornecedor" autocomplete="off"></div>
+<div><label>Data de emissão</label><input id="nfEmissao" type="date"></div>
+<div><label>Vencimento</label><input id="nfVenc" type="date"></div>
+<div><label>Pedido de compra (opcional)</label><select id="nfPedido" onchange="nfCarregarPedido()"></select></div>
+</div>
+<div class="malote-nf-box">
+<h4>Itens da nota</h4>
+<div class="grid">
+<div><label>Categoria</label><select id="nfCategoria" onchange="filtrarProdutosCompra('nf')"></select></div>
+<div><label>Produto</label><select id="nfProd" onchange="atualizarUnCompra('nf')"></select></div>
+<div><label>Quantidade</label><input id="nfQtd" type="number" min="0.001" step="any" value="1" inputmode="decimal"></div>
+<div><label>Unidade de medida</label><input id="nfUn" type="text" readonly placeholder="Automática pelo produto"></div>
+<div><label>Valor unitário (R$)</label><input id="nfValor" type="number" min="0" step="0.01" placeholder="Opcional" inputmode="decimal"></div>
+</div>
+<div class="actions"><button type="button" data-stock-action="1" onclick="nfAddItem()">＋ Adicionar item</button></div>
+<div id="nfDraftItems" class="req-items-box"></div>
+</div>
+<div class="actions"><button type="button" class="green" data-stock-action="1" onclick="nfSalvar()">Lançar nota e atualizar estoque</button><button type="button" class="secondary" data-stock-action="1" onclick="nfLimparForm()">Limpar</button></div>
+</div>
+<div class="card req-filter-card">
+<input id="nfBusca" placeholder="Buscar NF, fornecedor, pedido ou produto..." oninput="renderNotasFiscais()">
+<button class="req-clear" type="button" onclick="document.getElementById('nfBusca').value='';renderNotasFiscais()">Limpar filtros</button>
+</div>
+<div id="nfList" class="req-list"></div>
+</section>
 
 <section id="suco" class="view special-purchase-view">
 <div class="special-page-head"><div><h2>🍊 Suco de Laranja</h2><div class="special-subtitle">Controle das compras de suco e acompanhamento do gasto mensal.</div></div></div>
