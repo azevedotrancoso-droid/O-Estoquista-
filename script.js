@@ -1040,6 +1040,7 @@ function deleteCompraEspecial(i){
 }
 
 function renderMovimentos(){
+ atualizarClassificacaoMov();
  const filtro=(document.getElementById("filtroMovimento")?.value||"").trim().toLowerCase();
  const todos=Array.isArray(db.mov)?db.mov:[];
  const lista=filtro?todos.filter(m=>String(m.motivo||"").toLowerCase().includes(filtro)):todos;
@@ -1047,7 +1048,7 @@ function renderMovimentos(){
  if(movCount) movCount.textContent=lista.length+(lista.length===1?" movimento":" movimentos");
  const box=document.getElementById("movTable");
  if(!box)return;
- box.innerHTML=lista.length?`<div class="mov-list">${lista.slice().reverse().map(m=>{const entrada=m.tipo==="entrada";return `<div class="mov-card ${entrada?'mov-entry':'mov-exit'}"><div class="mov-card-top"><div><div class="mov-product">${esc(m.prod)}</div><div class="mov-meta">${esc(formatDateBR(m.data))} · ${esc(m.un||'un.')}</div></div><span class="mov-badge ${entrada?'mov-badge-entry':'mov-badge-exit'}">${entrada?'↑ Entrada':'↓ Saída'}</span></div><div class="mov-details"><div class="mov-detail">Quantidade<strong>${m.qtd} ${esc(m.un||'')}</strong></div><div class="mov-detail">Motivo<strong>${esc(m.motivo||'Sem motivo informado')}</strong></div><div class="mov-detail">Ação<strong>${m.reqId||m.origem==="requisicao"?'🔒 Requisição entregue':(canDelete()?`<button class="mov-delete" onclick="delMov('${m.id}')">Apagar</button>`:'🔒 Sem permissão')}</strong></div></div></div>`}).join('')}</div>`:"<div class='mov-empty'>Nenhuma movimentação encontrada para este filtro.</div>";
+ box.innerHTML=lista.length?`<div class="mov-list">${lista.slice().reverse().map(m=>{const entrada=m.tipo==="entrada";return `<div class="mov-card ${entrada?'mov-entry':'mov-exit'}"><div class="mov-card-top"><div><div class="mov-product">${esc(m.prod)}</div><div class="mov-meta">${esc(formatDateBR(m.data))} · ${esc(m.un||'un.')}</div></div><span class="mov-badge ${entrada?'mov-badge-entry':'mov-badge-exit'}">${entrada?'↑ Entrada':'↓ Saída'}</span></div><div class="mov-details"><div class="mov-detail">Quantidade<strong>${m.qtd} ${esc(m.un||'')}</strong></div><div class="mov-detail">Classificação<strong>${m.tipo==='entrada'?'Compra':(movimentoEhDesvio(m)?'Desvio':'Consumo')}</strong></div><div class="mov-detail">Motivo<strong>${esc(m.motivo||'Sem motivo informado')}</strong></div><div class="mov-detail">Ação<strong>${m.reqId||m.origem==="requisicao"?'🔒 Requisição entregue':(canDelete()?`<button class="mov-delete" onclick="delMov('${m.id}')">Apagar</button>`:'🔒 Sem permissão')}</strong></div></div></div>`}).join('')}</div>`:"<div class='mov-empty'>Nenhuma movimentação encontrada para este filtro.</div>";
 }
 function popularCategoriasReqEmp(){
  const cats=[...new Set((db.produtos||[]).map(p=>String(p.categoria||"Sem categoria").trim()||"Sem categoria"))].sort((a,b)=>a.localeCompare(b,"pt-BR"));
@@ -1079,19 +1080,27 @@ function filtrarProdutosMovimento(){
  select.innerHTML='<option value="">Selecione...</option>'+produtos.map(p=>`<option value="${p.id}">${esc(p.nome)} (${p.estoque} ${p.un})</option>`).join("");
  if(produtos.some(p=>String(p.id)===String(atual)))select.value=atual;
 }
+function atualizarClassificacaoMov(){
+ const t=document.getElementById('mTipo'),c=document.getElementById('mClassificacao');
+ if(!t||!c)return;
+ const ent=t.value==='entrada',modo=ent?'compra':'saida';
+ if(c.dataset.modo===modo)return;
+ c.dataset.modo=modo;
+ c.innerHTML=ent?'<option value="compra">Compra</option>':'<option value="consumo">Consumo</option><option value="desvio">Desvio</option>';
+}
 function addMov(){
  if(!canEditStock())return denyOperate();
  let p=db.produtos.find(x=>String(x.id)===String(mProd.value)),q=Number(mQtd.value),tipo=mTipo.value;
- const setor=document.getElementById('mSetor')?.value||'Bar';
  const classificacao=document.getElementById('mClassificacao')?.value||'consumo';
  if(!p||!Number.isFinite(q)||q<=0)return alert("Selecione produto e informe uma quantidade válida.");
  if(!["entrada","saida"].includes(tipo))return alert("Tipo de movimento inválido.");
  if(!mData.value)return alert("Selecione a data do movimento.");
  if(tipo==="saida"&&p.estoque<q)return alert("Estoque insuficiente.");
- const classe=tipo==='entrada'?'consumo':classificacao;
+ const classe=tipo==='entrada'?'compra':(classificacao==='desvio'?'desvio':'consumo');
+ const motivo=mMot.value.trim()||(tipo==='entrada'?'Compra':'');
  p.estoque=arred(p.estoque+(tipo==="entrada"?q:-q));
- db.mov.push({id:id(),data:mData.value,prodId:p.id,prod:p.nome,tipo,qtd:q,un:p.un,motivo:mMot.value.trim(),setor:tipo==='saida'?setor:'',classificacao:classe});
- registrarAuditoria("Movimentação",mTipo.value==="entrada"?"Lançou entrada":"Lançou saída",`${p.nome} · ${q} ${p.un} · ${mMot.value.trim()||"Sem motivo"} · ${tipo==='saida'?setor+' · '+(classe==='desvio'?'Desvio':'Consumo'):''} · Data: ${mData.value}`);
+ db.mov.push({id:id(),data:mData.value,prodId:p.id,prod:p.nome,tipo,qtd:q,un:p.un,motivo,setor:'',classificacao:classe});
+ registrarAuditoria("Movimentação",mTipo.value==="entrada"?"Lançou entrada":"Lançou saída",`${p.nome} · ${q} ${p.un} · ${motivo||"Sem motivo"} · ${classe==='compra'?'Compra':(classe==='desvio'?'Desvio':'Consumo')} · Data: ${mData.value}`);
  mMot.value="";
  save();
 }
@@ -1881,8 +1890,8 @@ function montarRelatorio(tipo){
       const ent=lista.filter(m=>m.tipo==='entrada').length;
       return {...base,titulo:'Entradas e saídas',arquivo:'entradas_saidas',
         resumo:[['Movimentações',lista.length,'num'],['Entradas',ent,'num'],['Saídas',lista.length-ent,'num']],
-        secoes:[{nome:'Movimentações',titulo:'Movimentações',colunas:[{t:'Data',tipo:'data'},{t:'Produto',tipo:'texto',larg:34},{t:'Tipo',tipo:'texto'},{t:'Quantidade',tipo:'num'},{t:'Unidade',tipo:'texto'},{t:'Setor',tipo:'texto'},{t:'Classificação',tipo:'texto'},{t:'Motivo',tipo:'texto',larg:36}],
-          linhas:lista.map(m=>[m.data,m.prod,m.tipo==='entrada'?'Entrada':'Saída',Number(m.qtd)||0,m.un||'',m.setor||'',m.tipo==='saida'?(m.classificacao==='desvio'?'Desvio':'Consumo'):'',m.motivo||''])}]};
+        secoes:[{nome:'Movimentações',titulo:'Movimentações',colunas:[{t:'Data',tipo:'data'},{t:'Produto',tipo:'texto',larg:34},{t:'Tipo',tipo:'texto'},{t:'Quantidade',tipo:'num'},{t:'Unidade',tipo:'texto'},{t:'Classificação',tipo:'texto'},{t:'Motivo',tipo:'texto',larg:36}],
+          linhas:lista.map(m=>[m.data,m.prod,m.tipo==='entrada'?'Entrada':'Saída',Number(m.qtd)||0,m.un||'',m.tipo==='entrada'?'Compra':(movimentoEhDesvio(m)?'Desvio':'Consumo'),m.motivo||''])}]};
     }
     case 'requisicoes':{
       const lista=db.req.map(normalizeReq).slice().reverse().filter(reqMatches);

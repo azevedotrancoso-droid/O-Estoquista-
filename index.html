@@ -168,8 +168,8 @@ function toggleLoginPass(){
 <section id="movimentos" class="view">
 <div class="mov-page-head"><div><h2>Entradas e Saídas</h2><div class="mov-count">Registre e acompanhe todas as movimentações do estoque</div></div></div>
 <div class="card mov-form-card"><h3>Lançar movimento</h3><div class="grid">
-<div><label>Categoria</label><select id="mCategoria" onchange="filtrarProdutosMovimento()"></select></div><div><label>Produto</label><select id="mProd"></select></div><div><label>Tipo</label><select id="mTipo"><option value="entrada">Entrada</option><option value="saida">Saída</option></select></div>
-<div><label>Quantidade</label><input id="mQtd" type="number" min="0.001" step="any" value="1" inputmode="decimal"></div><div><label>Data</label><input id="mData" type="date"></div><div><label>Setor</label><select id="mSetor"><option value="Bar">Bar</option><option value="Cozinha">Cozinha</option></select></div><div><label>Classificação</label><select id="mClassificacao"><option value="consumo">Consumo</option><option value="desvio">Desvio</option></select></div><div><label>Motivo</label><input id="mMot" placeholder="Compra, ajuste, perda..."></div>
+<div><label>Categoria</label><select id="mCategoria" onchange="filtrarProdutosMovimento()"></select></div><div><label>Produto</label><select id="mProd"></select></div><div><label>Tipo</label><select id="mTipo" onchange="atualizarClassificacaoMov()"><option value="entrada">Entrada</option><option value="saida">Saída</option></select></div>
+<div><label>Quantidade</label><input id="mQtd" type="number" min="0.001" step="any" value="1" inputmode="decimal"></div><div><label>Data</label><input id="mData" type="date"></div><div><label>Classificação</label><select id="mClassificacao"><option value="compra">Compra</option></select></div><div><label>Motivo</label><input id="mMot" placeholder="Compra, ajuste, perda..."></div>
 </div><div class="actions"><button class="mov-launch" data-stock-action="1" onclick="addMov()">Lançar movimento</button></div></div>
 <div class="card mov-list-card">
 <div class="mov-list-card-head"><div><h3>Histórico de movimentações</h3><span id="movCountLabel"></span></div>
