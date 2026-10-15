@@ -40,6 +40,7 @@ async function cloudLoad(){
     if(hasCloudData||!hasLocalData){
       db=cloud;
       if(!Array.isArray(db.users))db.users=[];
+      if(!Array.isArray(db.malotesNF))db.malotesNF=[];
       normalizeCloudUsers();
     }
   }
@@ -57,6 +58,7 @@ async function cloudResolverConflito(){
     const active=document.querySelector(".view.active")?.id||"inicio";
     db=data.dados;
     if(!Array.isArray(db.users))db.users=[];
+    if(!Array.isArray(db.malotesNF))db.malotesNF=[];
     normalizeCloudUsers();
     lastCloudVersion=Number(data.versao||0);
     persistLocalOnly();
@@ -73,16 +75,19 @@ async function cloudResolverConflito(){
   alert("⚠️ Outra pessoa salvou alterações enquanto você trabalhava.\n\nOs dados foram atualizados com a versão mais recente. Confira e refaça a última ação, se ela não aparecer.");
 }
 async function cloudSave(){
-  if(!cloudReady||!supabaseClient)return;
+  if(!cloudReady||!supabaseClient)return false;
   cloudSavePendentes++;
   cloudSaveQueue=cloudSaveQueue.then(async()=>{
     const {data:{user}}=await supabaseClient.auth.getUser();
-    if(!user)return;
+    if(!user)throw new Error("Sessão não autenticada.");
     const {data:row,error:readError}=await supabaseClient.from("estoquista_state")
       .select("versao").eq("id",1).single();
     if(readError)throw readError;
     const versaoNuvem=Number(row?.versao||0);
-    if(versaoNuvem!==lastCloudVersion){await cloudResolverConflito();return;}
+    if(versaoNuvem!==lastCloudVersion){
+      await cloudResolverConflito();
+      throw new Error("Conflito de versão. Confira os dados atualizados e tente salvar novamente.");
+    }
     const nextVersion=versaoNuvem+1;
     const {data:atualizado,error}=await supabaseClient.from("estoquista_state").update({
       dados:cloudPayload(),
@@ -90,13 +95,18 @@ async function cloudSave(){
       atualizado_por:user.id
     }).eq("id",1).eq("versao",versaoNuvem).select("versao");
     if(error)throw error;
-    if(!atualizado||!atualizado.length){await cloudResolverConflito();return;}
+    if(!atualizado||!atualizado.length){
+      await cloudResolverConflito();
+      throw new Error("A versão mudou durante o salvamento. Confira os dados e tente novamente.");
+    }
     lastCloudVersion=nextVersion;
+    return true;
   }).catch(e=>{
     console.error("Falha ao sincronizar com Supabase:",e);
-    alert("❌ Não foi possível salvar na nuvem. Verifique a conexão e tente novamente.\n\nSuas alterações ficaram apenas neste aparelho.");
+    alert("❌ Não foi possível confirmar o salvamento na nuvem. Os dados permanecem neste aparelho. Verifique a conexão e tente salvar novamente.\n\nDetalhe: "+(e?.message||"erro desconhecido"));
+    return false;
   }).finally(()=>{cloudSavePendentes=Math.max(0,cloudSavePendentes-1);});
-  return cloudSaveQueue;
+  return await cloudSaveQueue;
 }
 async function syncCloudAfterLogin(authUser){
   await cloudLoad();
@@ -149,6 +159,7 @@ async function refreshCloudSilently(){
       const active=document.querySelector(".view.active")?.id||"inicio";
       db=data.dados;
       if(!Array.isArray(db.users))db.users=[];
+      if(!Array.isArray(db.malotesNF))db.malotesNF=[];
       normalizeCloudUsers();
       lastCloudVersion=version;
       persistLocalOnly();
@@ -316,50 +327,14 @@ if(!Array.isArray(db.users))db.users=[];
 if(!Array.isArray(db.comprasEspeciais))db.comprasEspeciais=[];
 if(!Array.isArray(db.auditoria))db.auditoria=[];
 if(!Array.isArray(db.inventarios))db.inventarios=[];
+if(!Array.isArray(db.malotesNF))db.malotesNF=[];
 if(!Array.isArray(db.destilados))db.destilados=[];
 if(!Array.isArray(db.drinks))db.drinks=[];
 if(!Array.isArray(db.categorias))db.categorias=[];
-if(!Array.isArray(db.categoriasExcluidas))db.categoriasExcluidas=[];
-if(!Array.isArray(db.rnc))db.rnc=[];
-if(!Array.isArray(db.malotes))db.malotes=[];
 db.produtos.forEach(p=>{ if(!Number.isFinite(Number(p.ideal))) p.ideal=Math.max(Number(p.min)||0,(Number(p.min)||0)*2); });
-/* Remoção definitiva da categoria Uniformes (pedido do usuário): apaga a categoria e os produtos dela.
-   O histórico de movimentações e inventários é mantido, igual à exclusão normal de produto. */
-function removerCategoriaUniformes(){
-  let mudou=false;
-  const removidos=db.produtos.filter(p=>ehCategoriaRH(p&&p.categoria));
-  if(removidos.length){db.produtos=db.produtos.filter(p=>!ehCategoriaRH(p&&p.categoria));mudou=true;}
-  if(Array.isArray(db.categorias)&&db.categorias.some(c=>ehCategoriaRH(c))){db.categorias=db.categorias.filter(c=>!ehCategoriaRH(c));mudou=true;}
-  if(mudou)registrarAuditoria('Produto','Removeu a categoria Uniformes',`${removidos.length} produto(s) removido(s)`);
-  return mudou;
-}
-removerCategoriaUniformes();
-/* Cadastro único dos refrigerantes (pedido do usuário): categoria Refrigerantes, estoque mínimo 5.
-   Roda uma vez só (marcada em db.seedRefrigerantes1) e ignora nomes que já existem. */
-const REFRIGERANTES_BASE=[
-  ["CITRUS SCHWEPPES LT 350ML",63],["COCA-COLA GF 290ML",455],["COCA-COLA LATA 350ML",24],["COCA-COLA ZERO GF 290ML",890],
-  ["COCA-COLA ZERO LATA 350ML",22],["FANTA LARANJA GF 290ML",0],["FANTA LARANJA LATA 350ML",22],["FANTA UVA GF 290ML",4],
-  ["FANTA UVA LATA 350ML",3],["GUARANA DIET LT 350ML",53],["GUARANA GF 290ML",0],["GUARANA LATA",0],
-  ["H2O LIMÃO GF 500ML",37],["H2O LIMONETO",4],["PEPSI ZERO 350ML",0],["PEPSI ZERO BLACK 350ML",37],
-  ["SODA LT 350 ML",26],["SPRITE GF 290ML",78],["SPRITE LEMON FRESH 510ML",68],["TONICA DIET LT 350ML",11],["TONICA LT 350 ML",25]
-];
-function cadastrarRefrigerantesBase(){
-  if(db.seedRefrigerantes1)return false;
-  const chave=t=>String(t||"").trim().toLowerCase();
-  const existentes=new Set(db.produtos.map(p=>chave(p.nome)));
-  let n=0;
-  REFRIGERANTES_BASE.forEach(([nome,estoque])=>{
-    if(existentes.has(chave(nome)))return;
-    db.produtos.push({id:id(),nome,cod:"",un:"UN",categoria:"Refrigerantes",estoque,min:5,ideal:10});
-    n++;
-  });
-  db.seedRefrigerantes1=true;
-  if(n)registrarAuditoria("Produto","Cadastro em lote de refrigerantes",`${n} produto(s) · categoria Refrigerantes · mínimo 5 UN`);
-  return true;
-}
-const CATEGORIAS_PADRAO=["Camara Fria","Estoque Seco","Destilados","Limpeza","Refrigerantes","Cervejas e chopp"];
+const CATEGORIAS_PADRAO=["Camara Fria","Estoque Seco","Destilados","Limpeza","Refrigerantes","Cervejas e chopp","Uniformes"];
 const categoriasLegadas=[...db.produtos.map(p=>String(p.categoria||"").trim()).filter(Boolean)];
-db.categorias=[...new Set([...CATEGORIAS_PADRAO,...db.categorias.map(x=>String(x||"").trim()).filter(Boolean),...categoriasLegadas])].filter(c=>!categoriaExcluida(c)||categoriaEmUso(c));
+db.categorias=[...new Set([...CATEGORIAS_PADRAO,...db.categorias.map(x=>String(x||"").trim()).filter(Boolean),...categoriasLegadas])];
 
 // Referências explícitas aos elementos da interface. Isso evita depender
 // do comportamento implícito do navegador de transformar IDs em variáveis globais.
@@ -468,10 +443,6 @@ const ICON_PATHS={
   '👤':'<circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/>',
   '⚙️':'<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.8 1.8 0 0 0 .36 2l.06.06-1.9 1.9-.06-.06a1.8 1.8 0 0 0-2-.36 1.8 1.8 0 0 0-1.1 1.65V21h-2.7v-.08A1.8 1.8 0 0 0 11 19.27a1.8 1.8 0 0 0-2-.36l-.06.06-1.9-1.9.06-.06a1.8 1.8 0 0 0 .36-2A1.8 1.8 0 0 0 5.81 14H5.7v-2.7h.11A1.8 1.8 0 0 0 7.46 10a1.8 1.8 0 0 0-.36-2l-.06-.06 1.9-1.9.06.06a1.8 1.8 0 0 0 2 .36A1.8 1.8 0 0 0 12.1 4.8V4h2.7v.8a1.8 1.8 0 0 0 1.1 1.65 1.8 1.8 0 0 0 2-.36l.06-.06 1.9 1.9-.06.06a1.8 1.8 0 0 0-.36 2 1.8 1.8 0 0 0 1.65 1.1h.11V14h-.11A1.8 1.8 0 0 0 19.4 15z"/>',
   '⚙':'<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.8 1.8 0 0 0 .36 2l.06.06-1.9 1.9-.06-.06a1.8 1.8 0 0 0-2-.36 1.8 1.8 0 0 0-1.1 1.65V21h-2.7v-.08A1.8 1.8 0 0 0 11 19.27a1.8 1.8 0 0 0-2-.36l-.06.06-1.9-1.9.06-.06a1.8 1.8 0 0 0 .36-2A1.8 1.8 0 0 0 5.81 14H5.7v-2.7h.11A1.8 1.8 0 0 0 7.46 10a1.8 1.8 0 0 0-.36-2l-.06-.06 1.9-1.9.06.06a1.8 1.8 0 0 0 2 .36A1.8 1.8 0 0 0 12.1 4.8V4h2.7v.8a1.8 1.8 0 0 0 1.1 1.65 1.8 1.8 0 0 0 2-.36l.06-.06 1.9 1.9-.06.06a1.8 1.8 0 0 0-.36 2 1.8 1.8 0 0 0 1.65 1.1h.11V14h-.11A1.8 1.8 0 0 0 19.4 15z"/>',
-  '⚠️':'<path d="M12 3 2.7 20h18.6z"/><path d="M12 9v5M12 17h.01"/>',
-  '⚠':'<path d="M12 3 2.7 20h18.6z"/><path d="M12 9v5M12 17h.01"/>',
-  '📷':'<path d="M4 8h3l1.5-2h7L17 8h3v11H4z"/><circle cx="12" cy="13" r="3.5"/>',
-  '📅':'<rect x="4" y="5" width="16" height="15" rx="2"/><path d="M4 10h16M8 3v4M16 3v4"/>',
   '🚨':'<path d="M12 3 2.7 20h18.6z"/><path d="M12 9v5M12 17h.01"/>',
   '🔎':'<circle cx="10.5" cy="10.5" r="6"/><path d="m16 16 5 5"/>',
   '📄':'<path d="M6 3h9l4 4v14H6z"/><path d="M15 3v5h5M9 13h6M9 17h6"/>',
@@ -544,26 +515,43 @@ function renderSaudacao(){
   document.getElementById("saudacaoIcone").textContent=icone;
   box.style.display="flex";
 }
+function renderDashboardExtras(lowList){
+ const hojeEl=document.getElementById('dashboardHoje');
+ if(hojeEl)hojeEl.textContent=new Date().toLocaleDateString('pt-BR',{weekday:'short',day:'2-digit',month:'short'}).replace(/\./g,'');
+ const zerados=document.getElementById('sZerado');
+ if(zerados)zerados.textContent=(db.produtos||[]).filter(p=>Number(p.estoque)<=0).length;
+ const pendentes=document.getElementById('sReqPendentes');
+ const reqs=(db.req||[]).map(r=>{try{return normalizeReq(r)}catch(e){return r}});
+ if(pendentes)pendentes.textContent=reqs.filter(r=>['Pendente','Separando'].includes(String(r.status||''))).length;
+ const recent=document.getElementById('dashboardMovRecentes');
+ if(recent){
+  const items=(db.mov||[]).slice().reverse().slice(0,5);
+  recent.innerHTML=items.length?items.map(m=>{
+   const entrada=m.tipo==='entrada';
+   const nome=String(m.prod||'Produto');
+   const data=typeof formatDateBR==='function'?formatDateBR(m.data):(m.data||'');
+   const qtd=Number(m.qtd)||0;
+   return `<div class="dashboard-recent-item"><span class="recent-type ${entrada?'is-entry':'is-exit'}">${entrada?'↑':'↓'}</span><div class="recent-main"><strong>${esc(nome)}</strong><small>${esc(data)} · ${esc(m.motivo|| (entrada?'Entrada':'Saída'))}</small></div><div class="recent-qty ${entrada?'is-entry':'is-exit'}">${entrada?'+':'−'}${qtd.toLocaleString('pt-BR')} <small>${esc(m.un||'un.')}</small></div></div>`;
+  }).join(''):'<div class="dashboard-empty">Ainda não há movimentações registradas.</div>';
+ }
+}
 function render(){
- if(removerCategoriaUniformes())persist();
- if(cadastrarRefrigerantesBase())persist();
  applyPermissions();
  renderSaudacao();
  renderExportacaoMenu();
  document.querySelectorAll("select").forEach(()=>{});
  sProdutos.textContent=db.produtos.length;sReq.textContent=db.req.length;sMov.textContent=db.mov.length;
- const low=db.produtos.filter(p=>p.estoque<=p.min);sBaixo.textContent=low.length;
+ const low=db.produtos.filter(p=>Number(p.estoque)<=Number(p.min));sBaixo.textContent=low.length;
+ renderDashboardExtras(low);
  baixo.innerHTML=low.length?low.map(p=>`<div class="stock-alert"><div class="alert-name">${esc(p.nome)}</div><small>Estoque atual: <b>${p.estoque} ${p.un}</b> · Estoque mínimo: <b>${p.min} ${p.un}</b></small></div>`).join(""):"<div class='stock-ok'>✅ Todos os produtos estão acima do estoque mínimo.</div>";
  const baixoCount=document.getElementById("baixoCount"); if(baixoCount){baixoCount.textContent=low.length; baixoCount.classList.toggle("is-zero",!low.length);}
  const opts='<option value="">Selecione...</option>'+db.produtos.map(p=>`<option value="${p.id}">${esc(p.nome)} (${p.estoque} ${p.un})</option>`).join("");
  const selectedProd=rProd.value; rProd.innerHTML=opts; if(mCategoria){ const cats=[...new Set((db.produtos||[]).map(p=>String(p.categoria||"Sem categoria").trim()||"Sem categoria"))].sort((a,b)=>a.localeCompare(b,"pt-BR")); const selCat=mCategoria.value; mCategoria.innerHTML='<option value="">Todas as categorias</option>'+cats.map(c=>`<option value="${esc(c)}">${esc(c)}</option>`).join(""); if(cats.includes(selCat))mCategoria.value=selCat; } mProd.innerHTML=opts; if(mCategoria?.value)filtrarProdutosMovimento();
- const selectedEmp=eProd?.value; if(eProd){eProd.innerHTML=opts; if(selectedEmp && db.produtos.some(p=>String(p.id)===String(selectedEmp)))eProd.value=selectedEmp;} updateEmprestimoUnit(); if(selectedProd && db.produtos.some(p=>String(p.id)===String(selectedProd))){rProd.value=selectedProd;} updateReqUnit(); popularCategoriasReqEmp();
+ const selectedEmp=eProd?.value; if(eProd){eProd.innerHTML=opts; if(selectedEmp && db.produtos.some(p=>String(p.id)===String(selectedEmp)))eProd.value=selectedEmp;} updateEmprestimoUnit(); if(selectedProd && db.produtos.some(p=>String(p.id)===String(selectedProd))){rProd.value=selectedProd;} updateReqUnit();
  renderCategoriasUI();
  renderProdutos();
  renderRequisicoes();
  renderPendencias();
- renderRnc();
- renderMalote();
  renderMovimentos();
   renderNotas();
   renderComprasEspeciais();
@@ -574,33 +562,11 @@ function render(){
   renderAnaliseCMV();
   renderRelatorios();
   renderAuditoria();
-  renderUsuarios();
-}
-function userIniciais(nome){const p=String(nome||'').trim().split(/\s+/).filter(Boolean);if(!p.length)return '?';return ((p[0][0]||'')+(p.length>1?(p[p.length-1][0]||''):'')).toUpperCase();}
-function userPerfilClasse(perfil){return 'role-'+String(perfil||'consulta').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z]/g,'');}
-function renderUsuarios(){
-  const box=document.getElementById('userTable');if(!box)return;
-  const busca=(document.getElementById('userBusca')?.value||'').trim().toLowerCase();
-  const perfilF=document.getElementById('userPerfilFiltro')?.value||'';
-  const todos=db.users||[];
-  const lista=todos.filter(u=>(!perfilF||u.perfil===perfilF)&&(!busca||`${u.nome} ${u.login} ${u.email||''} ${u.perfil}`.toLowerCase().includes(busca)));
-  const resumo=document.getElementById('userResumo');
-  if(resumo){
-    const perfis=['Administrador','Estoquista','RH','Bar','Consulta'];
-    resumo.innerHTML=`<span class="summary-pill">${todos.length} usuário${todos.length===1?'':'s'}</span>`+perfis.map(p=>({p,n:todos.filter(u=>u.perfil===p).length})).filter(x=>x.n).map(x=>`<span class="summary-pill">${esc(x.p)}: ${x.n}</span>`).join('');
-  }
-  const cont=document.getElementById('userContagem');
-  if(cont)cont.textContent=(busca||perfilF)?`${lista.length} de ${todos.length} usuário(s) exibido(s)`:`${todos.length} usuário(s) com acesso ao sistema`;
-  if(!todos.length){box.innerHTML="<div class='report-empty'>Nenhum usuário cadastrado.</div>";return;}
-  if(!lista.length){box.innerHTML="<div class='report-empty'>Nenhum usuário encontrado com esse filtro.</div>";return;}
-  box.innerHTML=`<div class="user-list">${lista.map(u=>{
-    const principal=String(u.login||'').toLowerCase()==='admin';
-    const editar=`<button class="action-btn" onclick="editUser('${esc(u.id)}')"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20h4L19 9a2.8 2.8 0 0 0-4-4L4 16v4Z"/><path d="m13.5 6.5 4 4"/></svg>Editar</button>`;
-    const excluir=`<button class="trash-btn action-btn" onclick="delUser('${esc(u.id)}')" title="Excluir usuário" aria-label="Excluir usuário"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M19 6l-1 15H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/></svg>Excluir</button>`;
-    const trava=(txt)=>`<span class="user-lock"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>${txt}</span>`;
-    const acoes=canDelete()?(principal?editar+trava('Conta principal'):editar+excluir):trava('Sem permissão');
-    return `<div class="user-card"><div class="user-avatar" aria-hidden="true">${esc(userIniciais(u.nome))}</div><div class="user-info"><div class="user-name">${esc(u.nome)}</div><div class="user-meta">@${esc(u.login)}</div><div class="user-meta">${esc(u.email||'Sem e-mail')}</div></div><span class="user-role ${userPerfilClasse(u.perfil)}">${esc(u.perfil)}</span><div class="user-actions">${acoes}</div></div>`;
-  }).join('')}</div>`;
+  const userRows=db.users.map(u=>{
+    const actions=u.login==="admin"?(canDelete()?`<div class="actions"><button class="action-btn" onclick="editUser('${u.id}')">✏️ Editar</button><span class="muted">🔒 Principal</span></div>`:'<span class="muted">🔒 Principal</span>'):(canDelete()?`<div class="actions"><button class="action-btn" onclick="editUser('${u.id}')">✏️ Editar</button><button class="trash-btn action-btn" onclick="delUser('${u.id}')" title="Excluir usuário" aria-label="Excluir usuário"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M19 6l-1 15H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/></svg>Excluir</button></div>`:`<span class="muted">🔒 Sem permissão</span>`);
+    return `<tr><td>${esc(u.nome)}</td><td>${esc(u.login)}</td><td>${esc(u.email||"—")}</td><td>${esc(u.perfil)}</td><td>${actions}</td></tr>`;
+  }).join("");
+  userTable.innerHTML=db.users.length?`<div class="product-table-wrap"><table><tr><th>Nome</th><th>Usuário</th><th>E-mail</th><th>Perfil</th><th>Ações</th></tr>${userRows}</table></div>`:"<p class='muted'>Nenhum usuário cadastrado.</p>";
 }
 function arred(n){return Math.round((Number(n)||0)*1000)/1000}
 function id(){return Date.now().toString(36)+Math.random().toString(36).slice(2)}
@@ -609,9 +575,8 @@ function now(){return new Date().toLocaleString("pt-BR")}
 function normalizarCategoriasProdutos(){
   if(!Array.isArray(db.produtos)) db.produtos=[];
   if(!Array.isArray(db.categorias)) db.categorias=[];
-  if(!Array.isArray(db.categoriasExcluidas)) db.categoriasExcluidas=[];
   db.produtos.forEach(p=>{ if(typeof p.categoria!=="string") p.categoria=""; });
-  db.categorias=[...new Set([...CATEGORIAS_PADRAO,...db.categorias.map(x=>String(x||"").trim()).filter(Boolean),...db.produtos.map(p=>String(p.categoria||"").trim()).filter(Boolean)])].filter(c=>!categoriaExcluida(c)||categoriaEmUso(c));
+  db.categorias=[...new Set([...CATEGORIAS_PADRAO,...db.categorias.map(x=>String(x||"").trim()).filter(Boolean),...db.produtos.map(p=>String(p.categoria||"").trim()).filter(Boolean)])];
 }
 function renderCategoriasUI(){
   normalizarCategoriasProdutos();
@@ -625,26 +590,6 @@ function renderCategoriasUI(){
   if(pSel && cats.includes(atualP))pSel.value=atualP;
   if(pSel){if(isRH()){pSel.value=cats[0]||'';pSel.disabled=true;}else{pSel.disabled=false;}}
   if(filtro && cats.includes(atualF))filtro.value=atualF;
-  const exSel=document.getElementById('excluirCategoriaSel'), exBox=document.getElementById('categoriaExcluirBox');
-  if(exBox)exBox.style.display=canDelete()?'':'none';
-  if(exSel){const atualE=exSel.value; exSel.innerHTML='<option value="">Selecione a categoria</option>'+db.categorias.slice().sort((a,b)=>a.localeCompare(b,'pt-BR')).map(c=>`<option value="${esc(c)}">${esc(c)}</option>`).join(''); if(db.categorias.includes(atualE))exSel.value=atualE;}
-}
-function categoriaExcluida(c){const k=String(c||'').trim().toLowerCase();return (db.categoriasExcluidas||[]).some(x=>String(x||'').trim().toLowerCase()===k);}
-function categoriaEmUso(c){const k=String(c||'').trim().toLowerCase();return (db.produtos||[]).some(p=>String(p&&p.categoria||'').trim().toLowerCase()===k);}
-function excluirCategoria(){
-  if(!canDelete())return denyDelete();
-  const sel=document.getElementById('excluirCategoriaSel');
-  const nome=(sel?.value||'').trim();
-  if(!nome)return alert('Selecione a categoria que deseja excluir.');
-  normalizarCategoriasProdutos();
-  const emUso=db.produtos.filter(p=>String(p.categoria||'').trim().toLowerCase()===nome.toLowerCase());
-  if(emUso.length)return alert(`Não é possível excluir a categoria "${nome}": ela está sendo usada por ${emUso.length} produto(s). Exclua esses produtos antes de excluir a categoria.`);
-  if(!confirm(`Excluir a categoria "${nome}"?`))return;
-  db.categorias=db.categorias.filter(c=>String(c).trim().toLowerCase()!==nome.toLowerCase());
-  if(!categoriaExcluida(nome))db.categoriasExcluidas.push(nome);
-  registrarAuditoria('Produto','Excluiu categoria',`Categoria: ${nome}`);
-  save();
-  renderProdutos();
 }
 function criarCategoria(){
   if(!canEditStock())return denyOperate();
@@ -654,7 +599,6 @@ function criarCategoria(){
   normalizarCategoriasProdutos();
   if(db.categorias.some(c=>c.toLowerCase()===nome.toLowerCase()))return alert('Essa categoria já existe.');
   db.categorias.push(nome);
-  db.categoriasExcluidas=(db.categoriasExcluidas||[]).filter(x=>String(x||'').trim().toLowerCase()!==nome.toLowerCase());
   registrarAuditoria('Produto','Criou categoria',`Categoria: ${nome}`);
   if(input)input.value='';
   save();
@@ -662,23 +606,6 @@ function criarCategoria(){
   renderProdutos();
 }
 
-function custoProd(p){const c=Number(p&&p.custo);return Number.isFinite(c)&&c>0?c:0;}
-function temCusto(p){return custoProd(p)>0;}
-function valorProd(p){return Math.round((Number(p&&p.estoque)||0)*custoProd(p)*100)/100;}
-function atualizarCustoProduto(pid,valor){
-  if(!canEditProdutos())return denyOperate();
-  const p=db.produtos.find(x=>String(x.id)===String(pid));if(!p)return;
-  if(temCusto(p)){alert('O custo deste produto já foi cadastrado e não pode ser alterado.');renderProdutos();return;}
-  const txt=String(valor==null?'':valor).trim().replace(',','.');
-  if(txt===''){renderProdutos();return;}
-  const n=Number(txt);
-  if(!Number.isFinite(n)||n<=0){alert('Informe um custo válido, maior que zero.');renderProdutos();return;}
-  const custo=Math.round(n*10000)/10000;
-  if(!confirm(`Cadastrar o custo de "${p.nome}" em ${moedaBR(custo)} por ${p.un}?\n\nDepois de salvo, o custo NÃO poderá ser alterado.`)){renderProdutos();return;}
-  p.custo=custo;
-  registrarAuditoria('Produto','Cadastrou custo do produto',`Produto: ${p.nome} · Custo: ${moedaBR(custo)} por ${p.un}`);
-  save();
-}
 function renderProdutos(){
   normalizarCategoriasProdutos();
  const termo=(document.getElementById("buscaProduto")?.value||"").toLowerCase().trim();
@@ -689,17 +616,17 @@ function renderProdutos(){
    const nome=String(p.nome||"");
    const match=!termo || nome.toLowerCase().includes(termo) || String(p.cod||"").toLowerCase().includes(termo);
    const baixo=p.estoque<=p.min;
-   return match && (filtro==="todos" || (filtro==="baixo"&&baixo) || (filtro==="normal"&&!baixo) || (filtro==="semcusto"&&!temCusto(p))) && (!filtroCategoria || (p.categoria||"")===filtroCategoria);
+   return match && (filtro==="todos" || (filtro==="baixo"&&baixo) || (filtro==="normal"&&!baixo)) && (!filtroCategoria || (p.categoria||"")===filtroCategoria);
  });
  const baixos=visiveis.filter(p=>p.estoque<=p.min).length;
  const norm=visiveis.length-baixos;
  const resumo=document.getElementById("prodResumo");
- if(resumo) resumo.innerHTML=`<span class="summary-pill"><span class="cmv-inline-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="m12 3 8 4.5v9L12 21l-8-4.5v-9L12 3Z"/><path d="m4 7.5 8 4.5 8-4.5"/><path d="M12 12v9"/></svg></span>${visiveis.length} produtos</span><span class="summary-pill"><span class="cmv-inline-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 3 2.8 20h18.4L12 3Z"/><path d="M12 9v5"/><path d="M12 17h.01"/></svg></span>${baixos} com estoque baixo</span><span class="summary-pill"><span class="cmv-inline-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="m8 12.5 2.8 2.8L16 9.5"/></svg></span>${norm} normais</span><span class="summary-pill"><span class="cmv-inline-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="2.5" y="6" width="19" height="12" rx="2"/><circle cx="12" cy="12" r="2.6"/><path d="M6 9.5h.01"/><path d="M18 14.5h.01"/></svg></span>Valor do estoque: ${moedaBR(visiveis.reduce((t,p)=>t+valorProd(p),0))}</span>${visiveis.some(p=>!temCusto(p))?`<span class="summary-pill"><span class="cmv-inline-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 3 2.8 20h18.4L12 3Z"/><path d="M12 9v5"/><path d="M12 17h.01"/></svg></span>${visiveis.filter(p=>!temCusto(p)).length} sem custo</span>`:''}`;
+ if(resumo) resumo.innerHTML=`<span class="summary-pill">📦 ${visiveis.length} produtos</span><span class="summary-pill">🚨 ${baixos} com estoque baixo</span><span class="summary-pill">✅ ${norm} normais</span>`;
  if(!lista.length){
    prodTable.innerHTML='<div class="empty-products">🔎 Nenhum produto encontrado com os filtros atuais.</div>';
    return;
  }
- prodTable.innerHTML=`<div class="product-table-wrap"><table class="product-table"><tr><th>Produto</th><th>Categoria</th><th>Unidade</th><th>Estoque atual</th><th>Estoque mínimo</th><th>Estoque ideal</th><th>Custo unitário</th><th>Valor em estoque</th><th>Status</th><th>Ação</th></tr>${
+ prodTable.innerHTML=`<div class="product-table-wrap"><table class="product-table"><tr><th>Produto</th><th>Categoria</th><th>Unidade</th><th>Estoque atual</th><th>Estoque mínimo</th><th>Estoque ideal</th><th>Status</th><th>Ação</th></tr>${
    lista.map(p=>{
      const baixo=p.estoque<=p.min;
      return `<tr>
@@ -713,13 +640,11 @@ function renderProdutos(){
        <td><span class="stock-number ${baixo?"stock-low":"stock-normal"}">${p.estoque}</span></td>
        <td>${p.min}</td>
        <td>${Number(p.ideal||Math.max(Number(p.min)||0,(Number(p.min)||0)*2))}</td>
-       <td>${temCusto(p)?`<span class="badge category-locked" title="O custo não pode ser alterado depois de cadastrado">🔒 ${moedaBR(p.custo)}</span>`:(canEditProdutos()?`<input class="product-cost-input" type="number" min="0.01" step="0.01" inputmode="decimal" placeholder="R$ 0,00" onchange="atualizarCustoProduto('${esc(p.id)}',this.value)" onkeydown="event.stopPropagation()" onclick="event.stopPropagation()" title="Custo por ${esc(p.un)} (só pode ser cadastrado uma vez)">`:'<span class="muted">—</span>')}</td>
-       <td>${temCusto(p)?`<b>${moedaBR(valorProd(p))}</b>`:'<span class="muted">sem custo</span>'}</td>
        <td>${baixo?'<span class="badge low">🚨 Estoque baixo</span>':'<span class="badge ok">✓ Normal</span>'}</td>
        <td>${canDelete()?`<button class="trash-btn action-btn" onclick="delProduto('${p.id}')" title="Excluir produto" aria-label="Excluir produto"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M19 6l-1 15H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/></svg>Excluir</button>`:`<span class="muted">🔒 Sem permissão</span>`}</td>
      </tr>`;
    }).join("")
- }<tr class="product-total-row"><td colspan="7"><b>Total do que está listado (${lista.length} produto${lista.length===1?'':'s'})</b></td><td colspan="3"><b>${moedaBR(lista.reduce((t,p)=>t+valorProd(p),0))}</b></td></tr></table></div>`;
+ }</table></div>`;
 }
 
 function addProduto(){
@@ -732,8 +657,6 @@ function addProduto(){
   const estoque = Number(document.getElementById("pEst")?.value || 0);
   const min = Number(document.getElementById("pMin")?.value || 0);
   const idealInput=(document.getElementById("pIdeal")?.value||"").trim();
-  const custoTxt=(document.getElementById("pCusto")?.value||"").trim().replace(",",".");
-  const custo=custoTxt===""?null:Number(custoTxt);
   const ideal = idealInput==="" || (Number(idealInput)===0 && min>0) ? Math.max(min,min*2) : Number(idealInput);
 
   if(!nome) return alert("Informe o nome.");
@@ -741,10 +664,8 @@ function addProduto(){
   if(!Number.isFinite(min) || min < 0) return alert("Informe um estoque mínimo válido.");
   if(!Number.isFinite(ideal) || ideal < min) return alert("O estoque ideal deve ser maior ou igual ao mínimo.");
   if(!categoria) return alert("Selecione a categoria.");
-  if(custo!==null&&(!Number.isFinite(custo)||custo<0)) return alert("Informe um custo unitário válido (ou deixe em branco).");
-  if(custo!==null&&custo>0&&!confirm(`Cadastrar "${nome}" com custo de ${moedaBR(custo)} por ${un}?\n\nDepois de salvo, o custo NÃO poderá ser alterado.`)) return;
 
-  const novo={
+  db.produtos.push({
     id:id(),
     nome,
     cod,
@@ -753,9 +674,7 @@ function addProduto(){
     estoque,
     min,
     ideal
-  };
-  if(custo!==null&&custo>0)novo.custo=Math.round(custo*10000)/10000;
-  db.produtos.push(novo);
+  });
 
   document.getElementById("pNome").value="";
   document.getElementById("pCod").value="";
@@ -763,8 +682,7 @@ function addProduto(){
   document.getElementById("pEst").value=0;
   document.getElementById("pMin").value=0;
   if(document.getElementById("pIdeal"))document.getElementById("pIdeal").value=0;
-  if(document.getElementById("pCusto"))document.getElementById("pCusto").value="";
-  registrarAuditoria("Produto","Cadastro de produto",`Produto: ${nome} · Estoque inicial: ${estoque} ${un} · Mínimo: ${min} ${un} · Ideal: ${ideal} ${un}${novo.custo?` · Custo: ${moedaBR(novo.custo)}`:''}`);
+  registrarAuditoria("Produto","Cadastro de produto",`Produto: ${nome} · Estoque inicial: ${estoque} ${un} · Mínimo: ${min} ${un} · Ideal: ${ideal} ${un}`);
   save();
 }
 function updateReqUnit(){const p=db.produtos.find(x=>String(x.id)===String(rProd.value)); rUn.value=p?p.un:"";}
@@ -799,39 +717,31 @@ let emprestimoItens=[];
 function updateEmprestimoUnit(){const p=db.produtos.find(x=>String(x.id)===String(eProd?.value));if(eUn)eUn.value=p?p.un:"";}
 if(eProd)eProd.addEventListener("change",updateEmprestimoUnit);
 function emprestimoNextNumber(){const nums=db.emprestimos.map(x=>parseInt(String(x.numero||'').replace(/\D/g,''),10)).filter(Number.isFinite);const base=nums.length?Math.max(...nums):db.emprestimos.length;return 'EMP-'+String(base+1).padStart(4,'0');}
-function empTipoAtual(){return document.getElementById('eTipo')?.value==='tomado'?'tomado':'cedido';}
-function atualizarTipoEmprestimo(){const l=document.getElementById('ePessoaLabel');if(l)l.textContent=empTipoAtual()==='tomado'?'De quem você está pegando emprestado':'Para quem está sendo emprestado';}
 function addEmprestimoItem(){
  if(!canEditStock())return denyOperate();
  const p=db.produtos.find(x=>String(x.id)===String(eProd?.value)),q=Number(document.getElementById('eQtd')?.value||0);
  if(!p||!Number.isFinite(q)||q<=0)return alert('Selecione um produto e informe uma quantidade válida.');
- const cedido=empTipoAtual()==='cedido';
- if(cedido&&Number(p.estoque)<q)return alert(`Estoque insuficiente. Disponível: ${p.estoque} ${p.un}.`);
+ if(Number(p.estoque)<q)return alert(`Estoque insuficiente. Disponível: ${p.estoque} ${p.un}.`);
  const existente=emprestimoItens.find(x=>String(x.prodId)===String(p.id));
- if(existente){if(cedido&&p.estoque<existente.qtd+q)return alert(`Estoque insuficiente. Disponível: ${p.estoque} ${p.un}.`);existente.qtd=arred(existente.qtd+q);}else emprestimoItens.push({prodId:p.id,prod:p.nome,qtd:q,un:p.un});
+ if(existente){if(p.estoque<existente.qtd+q)return alert(`Estoque insuficiente. Disponível: ${p.estoque} ${p.un}.`);existente.qtd=arred(existente.qtd+q);}else emprestimoItens.push({prodId:p.id,prod:p.nome,qtd:q,un:p.un});
  document.getElementById('eQtd').value=1;renderEmprestimoDraft();
 }
 function renderEmprestimoDraft(){const box=document.getElementById('emprestimoDraftItems');if(!box)return;if(!emprestimoItens.length){box.innerHTML='<p class="muted">Nenhum produto adicionado ao empréstimo.</p>';return;}box.innerHTML=emprestimoItens.map((it,i)=>`<div class="req-draft-item"><div><b>${esc(it.prod)}</b><small>${it.qtd} ${esc(it.un)}</small></div><button class="req-draft-remove" type="button" onclick="emprestimoItens.splice(${i},1);renderEmprestimoDraft()">Remover</button></div>`).join('');}
 function addEmprestimo(){
  if(!canEditStock())return denyOperate();
  const pessoa=(document.getElementById('ePessoa')?.value||'').trim(),data=document.getElementById('eData')?.value||hojeISO(),obs=(document.getElementById('eObs')?.value||'').trim();
- const tomado=empTipoAtual()==='tomado';
- if(!pessoa)return alert(tomado?'Informe de quem o produto está sendo pego emprestado.':'Informe para quem o produto está sendo emprestado.');
+ if(!pessoa)return alert('Informe para quem o produto está sendo emprestado.');
  if(!emprestimoItens.length)return alert('Adicione pelo menos um produto ao empréstimo.');
- for(const it of emprestimoItens){const p=db.produtos.find(x=>String(x.id)===String(it.prodId));if(!p)return alert(`Produto não encontrado: ${it.prod}.`);if(!tomado&&Number(p.estoque)<Number(it.qtd))return alert(`Estoque insuficiente para ${it.prod}.`);}
- const emp={id:id(),numero:emprestimoNextNumber(),tipo:tomado?'tomado':'cedido',data,dataCriado:now(),pessoa,obs,status:'Pendente',itens:emprestimoItens.map(x=>({...x}))};
- emp.itens.forEach(it=>{const p=db.produtos.find(x=>String(x.id)===String(it.prodId));p.estoque=arred(p.estoque+(tomado?1:-1)*Number(it.qtd));db.mov.push({id:id(),data:emp.data,prodId:p.id,prod:p.nome,tipo:tomado?'entrada':'saida',qtd:Number(it.qtd),un:p.un,motivo:tomado?`Empréstimo recebido ${emp.numero} · ${emp.pessoa}`:`Empréstimo ${emp.numero} · ${emp.pessoa}`,origem:tomado?'emprestimo_recebido':'emprestimo',emprestimoId:emp.id});});
- db.emprestimos.unshift(emp);registrarAuditoria('Empréstimo',tomado?'Registrou empréstimo recebido':'Registrou empréstimo',`${emp.numero} · ${tomado?'De':'Para'}: ${emp.pessoa} · ${emp.itens.length} item(s)`);emprestimoItens=[];document.getElementById('ePessoa').value='';document.getElementById('eObs').value='';document.getElementById('eQtd').value=1;renderEmprestimoDraft();save();
+ for(const it of emprestimoItens){const p=db.produtos.find(x=>String(x.id)===String(it.prodId));if(!p||Number(p.estoque)<Number(it.qtd))return alert(`Estoque insuficiente para ${it.prod}.`);}
+ const emp={id:id(),numero:emprestimoNextNumber(),data,dataCriado:now(),pessoa,obs,status:'Pendente',itens:emprestimoItens.map(x=>({...x}))};
+ emp.itens.forEach(it=>{const p=db.produtos.find(x=>String(x.id)===String(it.prodId));p.estoque=arred(p.estoque-Number(it.qtd));db.mov.push({id:id(),data:emp.data,prodId:p.id,prod:p.nome,tipo:'saida',qtd:Number(it.qtd),un:p.un,motivo:`Empréstimo ${emp.numero} · ${emp.pessoa}`,origem:'emprestimo',emprestimoId:emp.id});});
+ db.emprestimos.unshift(emp);registrarAuditoria('Empréstimo','Registrou empréstimo',`${emp.numero} · Para: ${emp.pessoa} · ${emp.itens.length} item(s)`);emprestimoItens=[];document.getElementById('ePessoa').value='';document.getElementById('eObs').value='';document.getElementById('eQtd').value=1;renderEmprestimoDraft();save();
 }
 function renderPendencias(){
- const box=document.getElementById('pendTable');if(!box)return;const busca=(document.getElementById('pendBusca')?.value||'').toLowerCase().trim(),status=document.getElementById('pendStatusFiltro')?.value||'',tipoF=document.getElementById('pendTipoFiltro')?.value||'';const all=(db.emprestimos||[]).slice().reverse();const list=all.filter(x=>(!status||x.status===status)&&(!tipoF||(x.tipo==='tomado'?'tomado':'cedido')===tipoF)&&(!busca||`${x.numero} ${x.pessoa} ${x.obs||''} ${(x.itens||[]).map(i=>i.prod).join(' ')}`.toLowerCase().includes(busca)));const c=document.getElementById('pendCount');if(c)c.textContent=all.length;if(!list.length){box.innerHTML='<div class="req-empty">Nenhum empréstimo encontrado.</div>';return;}box.innerHTML=list.map(x=>{const pago=x.status==='Pago',tom=x.tipo==='tomado';return `<div class="req-card pend-card ${pago?'pend-paid':''}"><div class="req-card-top"><div><div class="req-code">${esc(x.numero)} · ${tom?'↙ Peguei emprestado':'↗ Emprestei'}</div><div class="req-meta">👤 ${tom?'De':'Para'}: ${esc(x.pessoa)} · ${esc(formatDateBR(x.data))}</div></div><span class="req-badge ${pago?'status-entregue':'status-pendente'}">${pago?'Pago':'Pendente'}</span></div><div class="pend-items">${(x.itens||[]).map(i=>`<span>${esc(i.prod)} · ${i.qtd} ${esc(i.un)}</span>`).join('')}</div>${x.obs?`<div class="req-bottom">Obs.: ${esc(x.obs)}</div>`:''}<div class="pend-actions">${!pago&&canEditStock()?`<button class="green" type="button" onclick="marcarEmprestimoPago('${x.id}');event.stopPropagation()">${tom?'✓ Marcar como devolvido':'✓ Marcar como pago'}</button>`:''}${canDelete()?`<button class="danger" type="button" onclick="excluirEmprestimo('${x.id}');event.stopPropagation()">🗑️ Excluir</button>`:''}</div></div>`;}).join('');}
-function marcarEmprestimoPago(i){if(!canEditStock())return denyOperate();const e=db.emprestimos.find(x=>String(x.id)===String(i));if(!e||e.status==='Pago')return;const tom=e.tipo==='tomado';
- if(tom){for(const it of e.itens||[]){const p=db.produtos.find(x=>String(x.id)===String(it.prodId));if(p&&Number(p.estoque)<Number(it.qtd))return alert(`Estoque insuficiente de ${it.prod} para devolver. Disponível: ${p.estoque} ${p.un}.`);}}
- if(!confirm(tom?`Marcar ${e.numero} como devolvido?\n\nOs produtos serão retirados do estoque (devolvidos para ${e.pessoa}).`:`Marcar ${e.numero} como pago/devolvido?\n\nOs produtos serão devolvidos ao estoque.`))return;
- for(const it of e.itens||[]){const p=db.produtos.find(x=>String(x.id)===String(it.prodId));if(p){p.estoque=arred(p.estoque+(tom?-1:1)*Number(it.qtd));db.mov.push({id:id(),data:hojeISO(),prodId:p.id,prod:p.nome,tipo:tom?'saida':'entrada',qtd:Number(it.qtd),un:p.un,motivo:tom?`Devolução de empréstimo ${e.numero} · ${e.pessoa}`:`Devolução ${e.numero} · ${e.pessoa}`,origem:tom?'emprestimo':'emprestimo_devolucao',emprestimoId:e.id});}}
- e.status='Pago';e.pagoEm=now();registrarAuditoria('Empréstimo',tom?'Marcou empréstimo recebido como devolvido':'Marcou como pago/devolvido',`${e.numero} · ${e.pessoa}`);save();}
+ const box=document.getElementById('pendTable');if(!box)return;const busca=(document.getElementById('pendBusca')?.value||'').toLowerCase().trim(),status=document.getElementById('pendStatusFiltro')?.value||'';const all=(db.emprestimos||[]).slice().reverse();const list=all.filter(x=>(!status||x.status===status)&&(!busca||`${x.numero} ${x.pessoa} ${x.obs||''} ${(x.itens||[]).map(i=>i.prod).join(' ')}`.toLowerCase().includes(busca)));const c=document.getElementById('pendCount');if(c)c.textContent=all.length;if(!list.length){box.innerHTML='<div class="req-empty">Nenhum empréstimo encontrado.</div>';return;}box.innerHTML=list.map(x=>{const pago=x.status==='Pago';return `<div class="req-card pend-card ${pago?'pend-paid':''}"><div class="req-card-top"><div><div class="req-code">${esc(x.numero)}</div><div class="req-meta">👤 ${esc(x.pessoa)} · ${esc(formatDateBR(x.data))}</div></div><span class="req-badge ${pago?'status-entregue':'status-pendente'}">${pago?'Pago':'Pendente'}</span></div><div class="pend-items">${(x.itens||[]).map(i=>`<span>${esc(i.prod)} · ${i.qtd} ${esc(i.un)}</span>`).join('')}</div>${x.obs?`<div class="req-bottom">Obs.: ${esc(x.obs)}</div>`:''}<div class="pend-actions">${!pago&&canEditStock()?`<button class="green" type="button" onclick="marcarEmprestimoPago('${x.id}');event.stopPropagation()">✓ Marcar como pago</button>`:''}${canDelete()?`<button class="danger" type="button" onclick="excluirEmprestimo('${x.id}');event.stopPropagation()">🗑️ Excluir</button>`:''}</div></div>`;}).join('');}
+function marcarEmprestimoPago(i){if(!canEditStock())return denyOperate();const e=db.emprestimos.find(x=>String(x.id)===String(i));if(!e||e.status==='Pago')return;if(!confirm(`Marcar ${e.numero} como pago/devolvido?\n\nOs produtos serão devolvidos ao estoque.`))return;for(const it of e.itens||[]){const p=db.produtos.find(x=>String(x.id)===String(it.prodId));if(p){p.estoque=arred(p.estoque+Number(it.qtd));db.mov.push({id:id(),data:hojeISO(),prodId:p.id,prod:p.nome,tipo:'entrada',qtd:Number(it.qtd),un:p.un,motivo:`Devolução ${e.numero} · ${e.pessoa}`,origem:'emprestimo_devolucao',emprestimoId:e.id});}}e.status='Pago';e.pagoEm=now();registrarAuditoria('Empréstimo','Marcou como pago/devolvido',`${e.numero} · ${e.pessoa}`);save();}
 function excluirEmprestimo(i){if(!canDelete())return denyDelete();const e=db.emprestimos.find(x=>String(x.id)===String(i));if(!e)return;if(e.status!=='Pago')return alert('Só é possível excluir um empréstimo depois de marcar como pago/devolvido.');if(!confirm(`Excluir ${e.numero}? O histórico de estoque será mantido.`))return;registrarAuditoria('Empréstimo','Excluiu empréstimo',`${e.numero} · ${e.pessoa}`);db.emprestimos=db.emprestimos.filter(x=>String(x.id)!==String(i));save();}
-function limparFiltrosPendencias(){['pendBusca','pendStatusFiltro','pendTipoFiltro'].forEach(i=>{const e=document.getElementById(i);if(e)e.value='';});renderPendencias();}
+function limparFiltrosPendencias(){['pendBusca','pendStatusFiltro'].forEach(i=>{const e=document.getElementById(i);if(e)e.value='';});renderPendencias();}
 
 function normalizeReq(r){
   if(!r || typeof r!=="object")return r;
@@ -1040,7 +950,6 @@ function deleteCompraEspecial(i){
 }
 
 function renderMovimentos(){
- atualizarClassificacaoMov();
  const filtro=(document.getElementById("filtroMovimento")?.value||"").trim().toLowerCase();
  const todos=Array.isArray(db.mov)?db.mov:[];
  const lista=filtro?todos.filter(m=>String(m.motivo||"").toLowerCase().includes(filtro)):todos;
@@ -1048,29 +957,8 @@ function renderMovimentos(){
  if(movCount) movCount.textContent=lista.length+(lista.length===1?" movimento":" movimentos");
  const box=document.getElementById("movTable");
  if(!box)return;
- box.innerHTML=lista.length?`<div class="mov-list">${lista.slice().reverse().map(m=>{const entrada=m.tipo==="entrada";return `<div class="mov-card ${entrada?'mov-entry':'mov-exit'}"><div class="mov-card-top"><div><div class="mov-product">${esc(m.prod)}</div><div class="mov-meta">${esc(formatDateBR(m.data))} · ${esc(m.un||'un.')}</div></div><span class="mov-badge ${entrada?'mov-badge-entry':'mov-badge-exit'}">${entrada?'↑ Entrada':'↓ Saída'}</span></div><div class="mov-details"><div class="mov-detail">Quantidade<strong>${m.qtd} ${esc(m.un||'')}</strong></div><div class="mov-detail">Classificação<strong>${m.tipo==='entrada'?'Compra':(movimentoEhDesvio(m)?'Desvio':'Consumo')}</strong></div><div class="mov-detail">Motivo<strong>${esc(m.motivo||'Sem motivo informado')}</strong></div><div class="mov-detail">Ação<strong>${m.reqId||m.origem==="requisicao"?'🔒 Requisição entregue':(canDelete()?`<button class="mov-delete" onclick="delMov('${m.id}')">Apagar</button>`:'🔒 Sem permissão')}</strong></div></div></div>`}).join('')}</div>`:"<div class='mov-empty'>Nenhuma movimentação encontrada para este filtro.</div>";
+ box.innerHTML=lista.length?`<div class="mov-list">${lista.slice().reverse().map(m=>{const entrada=m.tipo==="entrada";return `<div class="mov-card ${entrada?'mov-entry':'mov-exit'}"><div class="mov-card-top"><div><div class="mov-product">${esc(m.prod)}</div><div class="mov-meta">${esc(formatDateBR(m.data))} · ${esc(m.un||'un.')}</div></div><span class="mov-badge ${entrada?'mov-badge-entry':'mov-badge-exit'}">${entrada?'↑ Entrada':'↓ Saída'}</span></div><div class="mov-details"><div class="mov-detail">Quantidade<strong>${m.qtd} ${esc(m.un||'')}</strong></div><div class="mov-detail">Motivo<strong>${esc(m.motivo||'Sem motivo informado')}</strong></div><div class="mov-detail">Ação<strong>${m.reqId||m.origem==="requisicao"?'🔒 Requisição entregue':(canDelete()?`<button class="mov-delete" onclick="delMov('${m.id}')">Apagar</button>`:'🔒 Sem permissão')}</strong></div></div></div>`}).join('')}</div>`:"<div class='mov-empty'>Nenhuma movimentação encontrada para este filtro.</div>";
 }
-function popularCategoriasReqEmp(){
- const cats=[...new Set((db.produtos||[]).map(p=>String(p.categoria||"Sem categoria").trim()||"Sem categoria"))].sort((a,b)=>a.localeCompare(b,"pt-BR"));
- ["rCategoria","eCategoria"].forEach(id=>{
-  const cs=document.getElementById(id); if(!cs)return;
-  const atual=cs.value;
-  cs.innerHTML='<option value="">Todas as categorias</option>'+cats.map(c=>`<option value="${esc(c)}">${esc(c)}</option>`).join("");
-  if(cats.includes(atual))cs.value=atual;
- });
- filtrarProdutosReq(); filtrarProdutosEmp();
-}
-function filtrarProdutosPorCategoria(catId,prodId){
- const categoria=document.getElementById(catId)?.value||"";
- const select=document.getElementById(prodId);
- if(!select)return;
- const atual=select.value;
- const produtos=(db.produtos||[]).filter(p=>!categoria || String(p.categoria||"Sem categoria").trim()===categoria);
- select.innerHTML='<option value="">Selecione...</option>'+produtos.map(p=>`<option value="${p.id}">${esc(p.nome)} (${p.estoque} ${p.un})</option>`).join("");
- if(produtos.some(p=>String(p.id)===String(atual)))select.value=atual;
-}
-function filtrarProdutosReq(){filtrarProdutosPorCategoria("rCategoria","rProd");updateReqUnit();}
-function filtrarProdutosEmp(){filtrarProdutosPorCategoria("eCategoria","eProd");updateEmprestimoUnit();}
 function filtrarProdutosMovimento(){
  const categoria=document.getElementById("mCategoria")?.value||"";
  const select=document.getElementById("mProd");
@@ -1080,27 +968,19 @@ function filtrarProdutosMovimento(){
  select.innerHTML='<option value="">Selecione...</option>'+produtos.map(p=>`<option value="${p.id}">${esc(p.nome)} (${p.estoque} ${p.un})</option>`).join("");
  if(produtos.some(p=>String(p.id)===String(atual)))select.value=atual;
 }
-function atualizarClassificacaoMov(){
- const t=document.getElementById('mTipo'),c=document.getElementById('mClassificacao');
- if(!t||!c)return;
- const ent=t.value==='entrada',modo=ent?'compra':'saida';
- if(c.dataset.modo===modo)return;
- c.dataset.modo=modo;
- c.innerHTML=ent?'<option value="compra">Compra</option>':'<option value="consumo">Consumo</option><option value="desvio">Desvio</option>';
-}
 function addMov(){
  if(!canEditStock())return denyOperate();
  let p=db.produtos.find(x=>String(x.id)===String(mProd.value)),q=Number(mQtd.value),tipo=mTipo.value;
+ const setor=document.getElementById('mSetor')?.value||'Bar';
  const classificacao=document.getElementById('mClassificacao')?.value||'consumo';
  if(!p||!Number.isFinite(q)||q<=0)return alert("Selecione produto e informe uma quantidade válida.");
  if(!["entrada","saida"].includes(tipo))return alert("Tipo de movimento inválido.");
  if(!mData.value)return alert("Selecione a data do movimento.");
  if(tipo==="saida"&&p.estoque<q)return alert("Estoque insuficiente.");
- const classe=tipo==='entrada'?'compra':(classificacao==='desvio'?'desvio':'consumo');
- const motivo=mMot.value.trim()||(tipo==='entrada'?'Compra':'');
+ const classe=tipo==='entrada'?'consumo':classificacao;
  p.estoque=arred(p.estoque+(tipo==="entrada"?q:-q));
- db.mov.push({id:id(),data:mData.value,prodId:p.id,prod:p.nome,tipo,qtd:q,un:p.un,motivo,setor:'',classificacao:classe});
- registrarAuditoria("Movimentação",mTipo.value==="entrada"?"Lançou entrada":"Lançou saída",`${p.nome} · ${q} ${p.un} · ${motivo||"Sem motivo"} · ${classe==='compra'?'Compra':(classe==='desvio'?'Desvio':'Consumo')} · Data: ${mData.value}`);
+ db.mov.push({id:id(),data:mData.value,prodId:p.id,prod:p.nome,tipo,qtd:q,un:p.un,motivo:mMot.value.trim(),setor:tipo==='saida'?setor:'',classificacao:classe});
+ registrarAuditoria("Movimentação",mTipo.value==="entrada"?"Lançou entrada":"Lançou saída",`${p.nome} · ${q} ${p.un} · ${mMot.value.trim()||"Sem motivo"} · ${tipo==='saida'?setor+' · '+(classe==='desvio'?'Desvio':'Consumo'):''} · Data: ${mData.value}`);
  mMot.value="";
  save();
 }
@@ -1397,7 +1277,6 @@ function cmvPeriodoDados(mes){
  return {porProduto};
 }
 
-let _cmvValores=null;
 function renderAnaliseCMV(){
  const mesEl=document.getElementById('cmvMes');
  if(!mesEl)return;
@@ -1448,38 +1327,6 @@ function renderAnaliseCMV(){
  const cats=Object.values(porCat).sort((a,b)=>a.cat.localeCompare(b.cat,'pt-BR'));
  const tabela=document.getElementById('cmvCategoriaTabela');
  if(tabela)tabela.innerHTML=cats.length?`<div class="product-table-wrap"><table><thead><tr><th>Categoria</th><th>Inicial</th><th>Entradas</th><th>Saídas</th><th>Consumo apurado</th><th>Desvio</th><th>Final</th><th>Diferença</th><th>CMV %</th></tr></thead><tbody>${cats.map(c=>{const disp=c.inicio+c.entradas;const pct=disp>0?(c.consumo/disp)*100:0;const consumoCat=Math.max(0,c.inicio+c.entradas-c.fim);const dif=consumoCat-c.saidas;return `<tr><td><strong>${esc(c.cat)}</strong></td><td>${formatQuantidade(c.inicio)}</td><td>${formatQuantidade(c.entradas)}</td><td>${formatQuantidade(c.saidas)}</td><td><strong>${formatQuantidade(consumoCat)}</strong></td><td><strong>${formatQuantidade(c.desvio)}</strong></td><td>${formatQuantidade(c.fim)}</td><td><strong>${formatQuantidade(dif)}</strong></td><td>${pct.toFixed(1).replace('.',',')}%</td></tr>`;}).join('')}</tbody><tfoot><tr><th>Total</th><th>${formatQuantidade(totalInicio)}</th><th>${formatQuantidade(totalEntradas)}</th><th>${formatQuantidade(saidaTotal)}</th><th>${formatQuantidade(consumoApurado)}</th><th>${formatQuantidade(desvioTotal)}</th><th>${formatQuantidade(totalFim)}</th><th>${formatQuantidade(diferencaEstoque)}</th><th>${cmvPct.toFixed(1).replace('.',',')}%</th></tr></table></div>`:'<div class="report-empty">Nenhum produto cadastrado para analisar.</div>';
-
- // ===== CMV em reais (custo unitário atual de cada produto) =====
- const _catDe=p=>String(p.categoria||'Sem categoria').trim()||'Sem categoria';
- const valCat={};const _vc=cat=>valCat[cat]||(valCat[cat]={cat,inicio:0,compras:0,fim:0,consumo:0,saidas:0,desvio:0});
- let vIni=0,vEnt=0,vFim=0,vCons=0,vSaida=0,vDesv=0,semCusto=0;
- itens.forEach(x=>{
-   const c=custoProd(x.p),k=_vc(_catDe(x.p));
-   const consQ=Math.max(0,Number(x.inicio||0)+Number(x.entradas||0)-Number(x.fim||0));
-   if(!c){if(Number(x.inicio||0)>0||Number(x.entradas||0)>0||Number(x.fim||0)>0)semCusto++;return;}
-   const a=Number(x.inicio||0)*c,b=Number(x.entradas||0)*c,f=Number(x.fim||0)*c,q=consQ*c;
-   vIni+=a;vEnt+=b;vFim+=f;vCons+=q;k.inicio+=a;k.compras+=b;k.fim+=f;k.consumo+=q;
- });
- saidasRegistradas.forEach(m=>{
-   const x=porProduto[m.prodId];if(!x)return;const c=custoProd(x.p);if(!c)return;
-   const v=Number(m.qtd||0)*c,k=_vc(_catDe(x.p));vSaida+=v;k.saidas+=v;
-   if(movimentoEhDesvio(m)){vDesv+=v;k.desvio+=v;}
- });
- const vDisp=vIni+vEnt,vPct=vDisp>0?(vCons/vDisp)*100:0,vDif=vCons-vSaida;
- _cmvValores={mes,vIni,vEnt,vFim,vCons,vSaida,vDesv,vDif,vPct,semCusto,cats:Object.values(valCat).sort((a,b)=>a.cat.localeCompare(b.cat,'pt-BR'))};
- const vCards=document.getElementById('cmvValorCards');
- if(vCards)vCards.innerHTML=`
- <div class="card cmv-stat-card"><span>Estoque inicial (R$)</span><div class="stat">${moedaBR(vIni)}</div><small>Valor no início do período</small></div>
- <div class="card cmv-stat-card"><span>Compras / entradas (R$)</span><div class="stat">${moedaBR(vEnt)}</div><small>Valor das entradas do período</small></div>
- <div class="card cmv-stat-card"><span>Estoque final (R$)</span><div class="stat">${moedaBR(vFim)}</div><small>Valor ao final do período</small></div>
- <div class="card cmv-stat-card"><span>CMV (R$)</span><div class="stat">${moedaBR(vCons)}</div><small>Inicial + compras − final</small></div>
- <div class="card cmv-stat-card"><span>Desvios (R$)</span><div class="stat">${moedaBR(vDesv)}</div><small>Valor dos desvios lançados</small></div>
- <div class="card cmv-stat-card"><span>Diferença de estoque (R$)</span><div class="stat">${moedaBR(vDif)}</div><small>${vDif>=0?'Consumo não explicado pelas saídas':'Saídas acima do consumo apurado'}</small></div>
- <div class="card cmv-stat-card cmv-percent-card"><span>CMV em valor</span><div class="stat">${vPct.toFixed(1).replace('.',',')}%</div><small>CMV (R$) ÷ valor disponível</small></div>`;
- const vAviso=document.getElementById('cmvValorAviso');
- if(vAviso)vAviso.innerHTML=semCusto?`⚠️ ${semCusto} produto(s) com movimento ou saldo no período estão <b>sem custo cadastrado</b> e ficaram de fora dos valores. Cadastre o custo na aba Produtos (filtro "Sem custo cadastrado").`:'';
- const vTab=document.getElementById('cmvValorTabela');
- if(vTab)vTab.innerHTML=_cmvValores.cats.length?`<div class="product-table-wrap"><table><thead><tr><th>Categoria</th><th>Estoque inicial</th><th>Compras</th><th>Estoque final</th><th>CMV</th><th>Desvio</th><th>CMV %</th></tr></thead><tbody>${_cmvValores.cats.map(c=>{const d=c.inicio+c.compras;const p=d>0?(c.consumo/d)*100:0;return `<tr><td><strong>${esc(c.cat)}</strong></td><td>${moedaBR(c.inicio)}</td><td>${moedaBR(c.compras)}</td><td>${moedaBR(c.fim)}</td><td><strong>${moedaBR(c.consumo)}</strong></td><td>${moedaBR(c.desvio)}</td><td>${p.toFixed(1).replace('.',',')}%</td></tr>`;}).join('')}</tbody><tfoot><tr><th>Total</th><th>${moedaBR(vIni)}</th><th>${moedaBR(vEnt)}</th><th>${moedaBR(vFim)}</th><th>${moedaBR(vCons)}</th><th>${moedaBR(vDesv)}</th><th>${vPct.toFixed(1).replace('.',',')}%</th></tr></tfoot></table></div>`:'<div class="report-empty">Nenhum produto cadastrado.</div>';
 
  const porSetor={Bar:0,Cozinha:0};
  desvios.forEach(m=>{const setor=setorMovimento(m);porSetor[setor]=(porSetor[setor]||0)+Number(m.qtd||0);});
@@ -1599,7 +1446,7 @@ function renderRelatorios(){
  const mes=document.getElementById('relatorioMes')?.value||mesAtualISO();const mov=(db.mov||[]).filter(m=>String(m.data||'').slice(0,7)===mes);const req=(db.req||[]).map(normalizeReq).filter(r=>String(r.dataISO||r.data||'').slice(0,7)===mes);const compras=(db.comprasEspeciais||[]).filter(x=>String(x.data||'').slice(0,7)===mes);const entradas=mov.filter(m=>m.tipo==='entrada').reduce((s,m)=>s+Number(m.qtd||0),0),saidas=mov.filter(m=>m.tipo==='saida').reduce((s,m)=>s+Number(m.qtd||0),0);const gastos=compras.reduce((s,x)=>s+Number(x.total||0),0);const baixo=db.produtos.filter(p=>Number(p.estoque)<=Number(p.min)).length;
  const cards=document.getElementById('relatorioCards');if(cards)cards.innerHTML=`<div class="card"><span>Produtos</span><div class="stat">${db.produtos.length}</div></div><div class="card"><span>Estoque baixo</span><div class="stat">${baixo}</div></div><div class="card"><span>Entradas</span><div class="stat">${entradas}</div></div><div class="card"><span>Saídas</span><div class="stat">${saidas}</div></div><div class="card"><span>Requisições</span><div class="stat">${req.length}</div></div><div class="card"><span>Compras especiais</span><div class="stat">${moedaBR(gastos)}</div></div>`;
  const sug=document.getElementById('sugestaoComprasTable');const arr=sugestoesCompra();if(sug)sug.innerHTML=arr.length?`<div class="product-table-wrap"><table><tr><th>Produto</th><th>Atual</th><th>Mínimo</th><th>Ideal</th><th>Sugerir compra</th><th>Unidade</th></tr>${arr.map(p=>`<tr><td>${esc(p.nome)}</td><td>${p.estoque}</td><td>${p.min}</td><td>${p.ideal}</td><td><strong>${p.sugerida}</strong></td><td>${esc(p.un)}</td></tr>`).join('')}</table></div>`:'<div class="report-empty">✅ Nenhum produto abaixo do estoque ideal.</div>';
- const est=document.getElementById('relatorioEstoque');if(est)est.innerHTML=`<div class="product-table-wrap"><table><tr><th>Produto</th><th>Categoria</th><th>Atual</th><th>Mínimo</th><th>Ideal</th><th>Custo unit.</th><th>Valor</th><th>Status</th></tr>${db.produtos.slice().sort((a,b)=>String(a.nome).localeCompare(String(b.nome),'pt-BR')).map(p=>`<tr><td>${esc(p.nome)}</td><td>${esc(p.categoria||'-')}</td><td>${p.estoque} ${esc(p.un)}</td><td>${p.min}</td><td>${Number(p.ideal||0)}</td><td>${temCusto(p)?moedaBR(p.custo):'—'}</td><td>${temCusto(p)?moedaBR(valorProd(p)):'—'}</td><td>${p.estoque<=p.min?'<span class="badge low">Baixo</span>':'<span class="badge ok">Normal</span>'}</td></tr>`).join('')}<tr><td colspan="6"><b>Valor total do estoque</b></td><td colspan="2"><b>${moedaBR(db.produtos.reduce((t,p)=>t+valorProd(p),0))}</b></td></tr></table></div>`;
+ const est=document.getElementById('relatorioEstoque');if(est)est.innerHTML=`<div class="product-table-wrap"><table><tr><th>Produto</th><th>Categoria</th><th>Atual</th><th>Mínimo</th><th>Ideal</th><th>Status</th></tr>${db.produtos.slice().sort((a,b)=>String(a.nome).localeCompare(String(b.nome),'pt-BR')).map(p=>`<tr><td>${esc(p.nome)}</td><td>${esc(p.categoria||'-')}</td><td>${p.estoque} ${esc(p.un)}</td><td>${p.min}</td><td>${Number(p.ideal||0)}</td><td>${p.estoque<=p.min?'<span class="badge low">Baixo</span>':'<span class="badge ok">Normal</span>'}</td></tr>`).join('')}</table></div>`;
  const rm=document.getElementById('relatorioMovimentos');if(rm)rm.innerHTML=mov.length?`<div class="product-table-wrap"><table><tr><th>Data</th><th>Produto</th><th>Tipo</th><th>Qtd.</th><th>Motivo</th></tr>${mov.slice().reverse().map(m=>`<tr><td>${esc(m.data)}</td><td>${esc(m.prod)}</td><td>${m.tipo==='entrada'?'Entrada':'Saída'}</td><td>${m.qtd} ${esc(m.un||'')}</td><td>${esc(m.motivo||'-')}</td></tr>`).join('')}</table></div>`:'<div class="report-empty">Nenhuma movimentação no mês selecionado.</div>';
  const rr=document.getElementById('relatorioRequisicoes');if(rr)rr.innerHTML=req.length?`<div class="product-table-wrap"><table><tr><th>Requisição</th><th>Setor</th><th>Solicitante</th><th>Status</th><th>Prioridade</th></tr>${req.map(r=>`<tr><td>${esc(r.numero)}</td><td>${esc(r.setor)}</td><td>${esc(r.sol)}</td><td>${esc(r.status)}</td><td>${esc(r.prioridade)}</td></tr>`).join('')}</table></div>`:'<div class="report-empty">Nenhuma requisição no mês selecionado.</div>';
  const rc=document.getElementById('relatorioCompras');if(rc)rc.innerHTML=compras.length?`<div class="product-table-wrap"><table><tr><th>Data</th><th>Tipo</th><th>Quantidade</th><th>Unidade</th><th>Total</th></tr>${compras.slice().reverse().map(x=>`<tr><td>${esc(x.data)}</td><td>${x.tipo==='suco'?'Suco de laranja':'Gelo'}</td><td>${x.qtd}</td><td>${esc(x.un)}</td><td>${moedaBR(x.total)}</td></tr>`).join('')}</table></div>`:'<div class="report-empty">Nenhuma compra especial no mês selecionado.</div>';
@@ -1876,13 +1723,13 @@ function montarRelatorio(tipo){
       const termo=(document.getElementById('buscaProduto')?.value||'').toLowerCase().trim(),filtro=document.getElementById('filtroProduto')?.value||'todos',cat=document.getElementById('filtroCategoriaProduto')?.value||'';
       const lista=db.produtos.filter(produtoVisivel).filter(p=>{
         const match=!termo||String(p.nome||'').toLowerCase().includes(termo)||String(p.cod||'').toLowerCase().includes(termo),baixo=p.estoque<=p.min;
-        return match&&(filtro==='todos'||(filtro==='baixo'&&baixo)||(filtro==='normal'&&!baixo)||(filtro==='semcusto'&&!temCusto(p)))&&(!cat||(p.categoria||'')===cat);
+        return match&&(filtro==='todos'||(filtro==='baixo'&&baixo)||(filtro==='normal'&&!baixo))&&(!cat||(p.categoria||'')===cat);
       }).sort(_ordNome);
       const baixos=lista.filter(p=>p.estoque<=p.min).length;
       return {...base,titulo:'Produtos cadastrados',arquivo:'produtos',meta:cat?[['Categoria',cat]]:[],
-        resumo:[['Produtos listados',lista.length,'num'],['Com estoque baixo',baixos,'num'],['Com estoque normal',lista.length-baixos,'num'],['Valor total em estoque',lista.reduce((t,p)=>t+valorProd(p),0),'moeda'],['Produtos sem custo',lista.filter(p=>!temCusto(p)).length,'num']],
-        secoes:[{nome:'Produtos',titulo:'Produtos',colunas:[{t:'Produto',tipo:'texto',larg:38},{t:'Código',tipo:'texto'},{t:'Categoria',tipo:'texto',larg:20},{t:'Unidade',tipo:'texto'},{t:'Estoque atual',tipo:'num'},{t:'Estoque mínimo',tipo:'num'},{t:'Estoque ideal',tipo:'num'},{t:'Custo unitário',tipo:'moeda'},{t:'Valor em estoque',tipo:'moeda'},{t:'Status',tipo:'texto'}],
-          linhas:lista.map(p=>[p.nome,p.cod||'',p.categoria||'Sem categoria',p.un||'',Number(p.estoque)||0,Number(p.min)||0,Number(p.ideal||Math.max(Number(p.min)||0,(Number(p.min)||0)*2)),temCusto(p)?custoProd(p):'',temCusto(p)?valorProd(p):'',p.estoque<=p.min?'Estoque baixo':'Normal'])}]};
+        resumo:[['Produtos listados',lista.length,'num'],['Com estoque baixo',baixos,'num'],['Com estoque normal',lista.length-baixos,'num']],
+        secoes:[{nome:'Produtos',titulo:'Produtos',colunas:[{t:'Produto',tipo:'texto',larg:38},{t:'Código',tipo:'texto'},{t:'Categoria',tipo:'texto',larg:20},{t:'Unidade',tipo:'texto'},{t:'Estoque atual',tipo:'num'},{t:'Estoque mínimo',tipo:'num'},{t:'Estoque ideal',tipo:'num'},{t:'Status',tipo:'texto'}],
+          linhas:lista.map(p=>[p.nome,p.cod||'',p.categoria||'Sem categoria',p.un||'',Number(p.estoque)||0,Number(p.min)||0,Number(p.ideal||Math.max(Number(p.min)||0,(Number(p.min)||0)*2)),p.estoque<=p.min?'Estoque baixo':'Normal'])}]};
     }
     case 'movimentos':{
       const filtro=(document.getElementById('filtroMovimento')?.value||'').trim().toLowerCase(),todos=Array.isArray(db.mov)?db.mov:[];
@@ -1890,8 +1737,8 @@ function montarRelatorio(tipo){
       const ent=lista.filter(m=>m.tipo==='entrada').length;
       return {...base,titulo:'Entradas e saídas',arquivo:'entradas_saidas',
         resumo:[['Movimentações',lista.length,'num'],['Entradas',ent,'num'],['Saídas',lista.length-ent,'num']],
-        secoes:[{nome:'Movimentações',titulo:'Movimentações',colunas:[{t:'Data',tipo:'data'},{t:'Produto',tipo:'texto',larg:34},{t:'Tipo',tipo:'texto'},{t:'Quantidade',tipo:'num'},{t:'Unidade',tipo:'texto'},{t:'Classificação',tipo:'texto'},{t:'Motivo',tipo:'texto',larg:36}],
-          linhas:lista.map(m=>[m.data,m.prod,m.tipo==='entrada'?'Entrada':'Saída',Number(m.qtd)||0,m.un||'',m.tipo==='entrada'?'Compra':(movimentoEhDesvio(m)?'Desvio':'Consumo'),m.motivo||''])}]};
+        secoes:[{nome:'Movimentações',titulo:'Movimentações',colunas:[{t:'Data',tipo:'data'},{t:'Produto',tipo:'texto',larg:34},{t:'Tipo',tipo:'texto'},{t:'Quantidade',tipo:'num'},{t:'Unidade',tipo:'texto'},{t:'Setor',tipo:'texto'},{t:'Classificação',tipo:'texto'},{t:'Motivo',tipo:'texto',larg:36}],
+          linhas:lista.map(m=>[m.data,m.prod,m.tipo==='entrada'?'Entrada':'Saída',Number(m.qtd)||0,m.un||'',m.setor||'',m.tipo==='saida'?(m.classificacao==='desvio'?'Desvio':'Consumo'):'',m.motivo||''])}]};
     }
     case 'requisicoes':{
       const lista=db.req.map(normalizeReq).slice().reverse().filter(reqMatches);
@@ -1903,12 +1750,12 @@ function montarRelatorio(tipo){
           {nome:'Itens',titulo:'Itens das requisições',colunas:[{t:'Requisição',tipo:'texto'},{t:'Setor',tipo:'texto'},{t:'Produto',tipo:'texto',larg:34},{t:'Solicitado',tipo:'num'},{t:'Entregue',tipo:'num'},{t:'Unidade',tipo:'texto'}],linhas:itens}]};
     }
     case 'pendencias':{
-      const busca=(document.getElementById('pendBusca')?.value||'').toLowerCase().trim(),status=document.getElementById('pendStatusFiltro')?.value||'',tipoF=document.getElementById('pendTipoFiltro')?.value||'';
-      const lista=(db.emprestimos||[]).slice().reverse().filter(x=>(!status||x.status===status)&&(!tipoF||(x.tipo==='tomado'?'tomado':'cedido')===tipoF)&&(!busca||`${x.numero} ${x.pessoa} ${x.obs||''} ${(x.itens||[]).map(i=>i.prod).join(' ')}`.toLowerCase().includes(busca)));
+      const busca=(document.getElementById('pendBusca')?.value||'').toLowerCase().trim(),status=document.getElementById('pendStatusFiltro')?.value||'';
+      const lista=(db.emprestimos||[]).slice().reverse().filter(x=>(!status||x.status===status)&&(!busca||`${x.numero} ${x.pessoa} ${x.obs||''} ${(x.itens||[]).map(i=>i.prod).join(' ')}`.toLowerCase().includes(busca)));
       const pend=lista.filter(x=>x.status!=='Pago').length;
       return {...base,titulo:'Pendências (empréstimos)',arquivo:'pendencias',resumo:[['Empréstimos listados',lista.length,'num'],['Pendentes',pend,'num'],['Pagos / devolvidos',lista.length-pend,'num']],
-        secoes:[{nome:'Pendências',titulo:'Empréstimos',colunas:[{t:'Número',tipo:'texto'},{t:'Tipo',tipo:'texto',larg:18},{t:'Data',tipo:'data'},{t:'Pessoa',tipo:'texto',larg:24},{t:'Status',tipo:'texto'},{t:'Itens',tipo:'texto',larg:50},{t:'Observação',tipo:'texto',larg:30},{t:'Devolvido em',tipo:'texto',larg:20}],
-          linhas:lista.map(x=>[x.numero,x.tipo==='tomado'?'Peguei emprestado':'Emprestei',x.data,x.pessoa,x.status,(x.itens||[]).map(i=>`${i.prod} — ${i.qtd} ${i.un||''}`).join('; '),x.obs||'',x.pagoEm||''])}]};
+        secoes:[{nome:'Pendências',titulo:'Empréstimos',colunas:[{t:'Número',tipo:'texto'},{t:'Data',tipo:'data'},{t:'Pessoa',tipo:'texto',larg:24},{t:'Status',tipo:'texto'},{t:'Itens',tipo:'texto',larg:50},{t:'Observação',tipo:'texto',larg:30},{t:'Devolvido em',tipo:'texto',larg:20}],
+          linhas:lista.map(x=>[x.numero,x.data,x.pessoa,x.status,(x.itens||[]).map(i=>`${i.prod} — ${i.qtd} ${i.un||''}`).join('; '),x.obs||'',x.pagoEm||''])}]};
     }
     case 'suco':case 'gelo':{
       const mes=document.getElementById(tipo+'MesFiltro')?.value||mesAtualISO();
@@ -1956,18 +1803,10 @@ function montarRelatorio(tipo){
       renderAnaliseCMV();
       const resumo=[...document.querySelectorAll('#cmvCards .cmv-stat-card')].map(c=>{const v=(c.querySelector('.stat')?.textContent||'').trim(),n=_numerico(v);return [(c.querySelector('span')?.textContent||'').trim(),n!==null?n:v,n!==null?'num':'texto'];});
       const secoes=[];
-      const V=_cmvValores;if(V&&V.mes===mes){resumo.push(['Estoque inicial (R$)',V.vIni,'moeda'],['Compras / entradas (R$)',V.vEnt,'moeda'],['Estoque final (R$)',V.vFim,'moeda'],['CMV (R$)',V.vCons,'moeda'],['Desvios (R$)',V.vDesv,'moeda'],['Diferença de estoque (R$)',V.vDif,'moeda'],['CMV em valor (%)',Math.round(V.vPct*10)/10,'num'],['Produtos sem custo (fora dos valores)',V.semCusto,'num']);
-        secoes.push({nome:'CMV em reais',titulo:'CMV em reais por categoria',colunas:[{t:'Categoria',tipo:'texto',larg:24},{t:'Estoque inicial',tipo:'moeda'},{t:'Compras',tipo:'moeda'},{t:'Estoque final',tipo:'moeda'},{t:'CMV',tipo:'moeda'},{t:'Desvio',tipo:'moeda'}],linhas:V.cats.map(c=>[c.cat,c.inicio,c.compras,c.fim,c.consumo,c.desvio])});}
       [['cmvCategoriaTabela','CMV por categoria'],['cmvDesviosSetor','Desvios por setor']].forEach(([id,tit])=>{const t=document.querySelector('#'+id+' table');if(t)secoes.push(_secaoDeTabelaDOM(tit,t));});
       [['cmvDesvios','Desvios do CMV'],['cmvEspeciais','Compras especiais']].forEach(([id,tit])=>{const s=_secaoDeBlocosDOM(tit,document.getElementById(id));if(s)secoes.push(s);});
-      secoes.sort((a,b)=>['CMV por categoria','CMV em reais por categoria','Desvios do CMV','Desvios por setor','Compras especiais'].indexOf(a.titulo)-['CMV por categoria','CMV em reais por categoria','Desvios do CMV','Desvios por setor','Compras especiais'].indexOf(b.titulo));
+      secoes.sort((a,b)=>['CMV por categoria','Desvios do CMV','Desvios por setor','Compras especiais'].indexOf(a.titulo)-['CMV por categoria','Desvios do CMV','Desvios por setor','Compras especiais'].indexOf(b.titulo));
       return {...base,titulo:`Análise de CMV — ${m}/${y}`,arquivo:'cmv_'+mes,meta:[['Mês de referência',`${m}/${y}`]],resumo,secoes};
-    }
-    case 'malote':{return maloteRelatorioLista(maloteFiltrados().slice().reverse());}
-    case 'rnc':{
-      const lista=rncFiltradas().slice().reverse();
-      const t=document.getElementById('rncTipoFiltro')?.value||'',st=document.getElementById('rncStatusFiltro')?.value||'';
-      return {...rncRelatorio(lista,'RNC — Registros de não conformidade'),meta:[...(t?[['Problema',t]]:[]),...(st?[['Status',st]]:[])]};
     }
     case 'auditoria':{
       const q=(document.getElementById('auditoriaBusca')?.value||'').toLowerCase().trim(),t=document.getElementById('auditoriaTipo')?.value||'';
@@ -1979,7 +1818,7 @@ function montarRelatorio(tipo){
   }
   return null;
 }
-const _EXPORT_ROTULOS={produtos:'Produtos cadastrados',movimentos:'Entradas e saídas',requisicoes:'Requisições',pendencias:'Pendências (empréstimos)',suco:'Suco de laranja (mês)',gelo:'Gelo (mês)',bebidas:'Bebidas: fichas técnicas e destilados',inventario:'Histórico de inventários',cmv:'Análise de CMV (mês)',relatorios:'Relatório mensal completo',rnc:'RNC (não conformidades)',malote:'Malote NF (notas fiscais)',auditoria:'Auditoria'};
+const _EXPORT_ROTULOS={produtos:'Produtos cadastrados',movimentos:'Entradas e saídas',requisicoes:'Requisições',pendencias:'Pendências (empréstimos)',suco:'Suco de laranja (mês)',gelo:'Gelo (mês)',bebidas:'Bebidas: fichas técnicas e destilados',inventario:'Histórico de inventários',cmv:'Análise de CMV (mês)',relatorios:'Relatório mensal completo',auditoria:'Auditoria'};
 function exportacoesPermitidas(){return Object.keys(_EXPORT_ROTULOS).filter(podeExportar);}
 function podeExportar(tipo){
   if(!_EXPORT_ROTULOS[tipo]||!currentUser())return false;
@@ -2049,7 +1888,7 @@ function _barraExportacao(tipo){
   return d;
 }
 function montarBarrasExportacao(){
-  const mapa=[['produtos','.products-card h3','afterend'],['movimentos','.mov-page-head','afterend'],['requisicoes','.req-page-head','afterend'],['pendencias','.req-page-head','afterend'],['suco','.special-page-head','afterend'],['gelo','.special-page-head','afterend'],['bebidas','.drinks-page-head','afterend'],['inventario','#inventarioHistoricoCount','afterend'],['rnc','.req-page-head','afterend'],['malote','.req-page-head','afterend'],['cmv','.page-head','afterend'],['relatorios','.page-head','afterend'],['auditoria','.page-head','afterend']];
+  const mapa=[['produtos','.products-card h3','afterend'],['movimentos','.mov-page-head','afterend'],['requisicoes','.req-page-head','afterend'],['pendencias','.req-page-head','afterend'],['suco','.special-page-head','afterend'],['gelo','.special-page-head','afterend'],['bebidas','.drinks-page-head','afterend'],['inventario','#inventarioHistoricoCount','afterend'],['cmv','.page-head','afterend'],['relatorios','.page-head','afterend'],['auditoria','.page-head','afterend']];
   mapa.forEach(([tipo,sel,pos])=>{
     const secao=document.getElementById(tipo);if(!secao||secao.querySelector('.export-bar'))return;
     const alvo=secao.querySelector(sel);if(!alvo)return;
@@ -2059,347 +1898,7 @@ function montarBarrasExportacao(){
 }
 function renderExportacaoMenu(){
   const box=document.getElementById('menuExportacaoLista');if(!box)return;
-  box.innerHTML=exportacoesPermitidas().map(t=>`<div class="export-row"><div class="export-row-label"><span class="export-row-icon" aria-hidden="true"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8l-5-5Z"/><path d="M14 3v5h5"/><path d="M9 17v-3"/><path d="M12 17v-5"/><path d="M15 17v-2"/></svg></span><strong>${esc(_EXPORT_ROTULOS[t])}</strong></div><div class="export-btns"><button class="secondary" type="button" onclick="exportarRelatorio('${t}','pdf')"><span class="btn-ic" aria-hidden="true"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8l-5-5Z"/><path d="M14 3v5h5"/><path d="M9 13h6"/><path d="M9 17h6"/></svg></span>PDF</button><button class="green" type="button" onclick="exportarRelatorio('${t}','xlsx')"><span class="btn-ic" aria-hidden="true"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="4.5" width="17" height="15" rx="2"/><path d="M3.5 10h17"/><path d="M3.5 15h17"/><path d="M9.5 4.5v15"/></svg></span>Excel</button></div></div>`).join('')||'<p class="muted">Nenhum relatório disponível para o seu perfil.</p>';
-}
-
-/* ---------- RNC (Registro de Não Conformidade) ---------- */
-let rncFotoTemp='';
-function rncLista(){if(!Array.isArray(db.rnc))db.rnc=[];return db.rnc;}
-function rncStatus(r){return r&&r.status==='Resolvida'?'Resolvida':'Aberta';}
-function rncProximoNumero(){
-  const nums=rncLista().map(r=>parseInt(String(r.numero||'').replace(/\D/g,''),10)).filter(Number.isFinite);
-  const base=nums.length?Math.max(...nums):0;
-  return 'RNC-'+String(base+1).padStart(4,'0');
-}
-function rncQtdTxt(r,semUn){const n=Number(r&&r.qtd);if(!Number.isFinite(n)||n<=0)return '';return n.toLocaleString('pt-BR',{maximumFractionDigits:3})+(!semUn&&r.un?' '+r.un:'');}
-function rncCatDe(p){return String(p&&p.categoria||'Sem categoria').trim()||'Sem categoria';}
-function rncPopularCategorias(){
-  const sel=document.getElementById('rncCategoria');if(!sel)return;
-  const cats=[...new Set(db.produtos.filter(produtoVisivel).map(rncCatDe))].sort((a,b)=>a.localeCompare(b,'pt-BR'));
-  const html='<option value="">Selecione a categoria...</option>'+cats.map(c=>`<option value="${esc(c)}">${esc(c)}</option>`).join('');
-  if(sel.dataset.sig!==html){
-    const atual=sel.value;sel.innerHTML=html;sel.dataset.sig=html;
-    if(cats.includes(atual))sel.value=atual;
-  }
-  rncPopularProdutos();
-}
-function rncPopularProdutos(){
-  const catSel=document.getElementById('rncCategoria'),sel=document.getElementById('rncProduto');if(!catSel||!sel)return;
-  const cat=catSel.value;
-  if(!cat){
-    const vazio='<option value="">Selecione a categoria primeiro</option>';
-    if(sel.dataset.sig!==vazio){sel.innerHTML=vazio;sel.dataset.sig=vazio;}
-    sel.disabled=true;return;
-  }
-  sel.disabled=false;
-  const lista=db.produtos.filter(produtoVisivel).filter(p=>rncCatDe(p)===cat).sort(_ordNome);
-  const html='<option value="">Selecione o produto...</option>'+lista.map(p=>`<option value="${esc(p.id)}">${esc(p.nome)}</option>`).join('');
-  if(sel.dataset.sig!==html){
-    const atual=sel.value;sel.innerHTML=html;sel.dataset.sig=html;
-    if(lista.some(p=>String(p.id)===String(atual)))sel.value=atual;
-  }
-  rncAtualizarUn();
-}
-function rncAtualizarUn(){
-  const sel=document.getElementById('rncProduto'),un=document.getElementById('rncUn');if(!un)return;
-  const p=sel&&sel.value?db.produtos.find(x=>String(x.id)===String(sel.value)):null;
-  un.value=p?(p.un||'UN'):'';
-}
-function rncRenderFotoPreview(){
-  const box=document.getElementById('rncFotoPreview');if(!box)return;
-  box.innerHTML=rncFotoTemp?`<img src="${rncFotoTemp}" alt="Pré-visualização da foto"><button type="button" class="secondary" onclick="rncRemoverFoto()">Remover foto</button>`:'';
-  const t=document.getElementById('rncFotoBtnTxt');if(t)t.textContent=rncFotoTemp?'Trocar foto':'Adicionar foto';
-}
-function rncRemoverFoto(){rncFotoTemp='';rncRenderFotoPreview();}
-function rncCarregarFoto(input){
-  const f=input.files&&input.files[0];if(!f)return;
-  if(!/^image\//.test(f.type)){alert('Selecione um arquivo de imagem.');input.value='';return;}
-  const rd=new FileReader();
-  rd.onerror=()=>alert('Não foi possível ler a foto. Tente novamente.');
-  rd.onload=()=>{
-    const img=new Image();
-    img.onerror=()=>alert('Não foi possível abrir esta imagem. Tente outra foto.');
-    img.onload=()=>{
-      // Reduz a foto para não pesar no armazenamento (os dados ficam salvos junto com o sistema).
-      let escala=Math.min(1,800/Math.max(img.width,img.height)),q=.7,url='';
-      for(let i=0;i<8;i++){
-        const w=Math.max(1,Math.round(img.width*escala)),h=Math.max(1,Math.round(img.height*escala));
-        const c=document.createElement('canvas');c.width=w;c.height=h;
-        const ctx=c.getContext('2d');ctx.fillStyle='#fff';ctx.fillRect(0,0,w,h);ctx.drawImage(img,0,0,w,h);
-        url=c.toDataURL('image/jpeg',q);
-        if(url.length<=150000)break;
-        q=Math.max(.4,q-.08);escala*=.85;
-      }
-      rncFotoTemp=url;rncRenderFotoPreview();
-    };
-    img.src=rd.result;
-  };
-  rd.readAsDataURL(f);
-  input.value='';
-}
-function addRnc(){
-  const u=currentUser();
-  if(!u||!canOperateStock())return alert('⛔ Seu perfil não tem permissão para registrar RNC.');
-  const cat=document.getElementById('rncCategoria').value;
-  const prod=db.produtos.find(p=>String(p.id)===String(document.getElementById('rncProduto').value));
-  if(!cat||!prod)return alert('Selecione a categoria e o produto.');
-  const tipo=document.getElementById('rncTipo').value;
-  if(!tipo)return alert('Selecione o tipo de problema.');
-  const qtd=parseFloat(String(document.getElementById('rncQtd').value||'').replace(',','.'));
-  if(!Number.isFinite(qtd)||qtd<=0)return alert('Informe a quantidade com problema.');
-  const r={id:id(),numero:rncProximoNumero(),data:hojeISO(),dataHora:new Date().toISOString(),categoria:rncCatDe(prod),prodId:prod.id,prod:prod.nome,un:prod.un||'',qtd,tipo,nota:(document.getElementById('rncNota').value||'').trim(),descricao:(document.getElementById('rncDescricao').value||'').trim(),foto:rncFotoTemp||'',status:'Aberta',usuario:usuarioAtualNome()};
-  rncLista().push(r);
-  registrarAuditoria('RNC','Solicitou RNC',`${r.numero} · ${r.prod} · ${r.tipo}`);
-  if(!save()){
-    db.rnc=db.rnc.filter(x=>x.id!==r.id);
-    if(db.auditoria[0]&&db.auditoria[0].acao==='Solicitou RNC')db.auditoria.shift();
-    alert('❌ Não foi possível salvar a RNC. Se ela tem foto, tente uma foto menor ou sem foto.');
-    return;
-  }
-  ['rncDescricao','rncNota','rncQtd'].forEach(i=>{document.getElementById(i).value='';});
-  document.getElementById('rncTipo').value='';document.getElementById('rncProduto').value='';rncAtualizarUn();
-  rncFotoTemp='';rncRenderFotoPreview();
-  if(confirm(`✅ ${r.numero} solicitada com sucesso.\n\nDeseja gerar o PDF agora?`))rncExportarPDF(r.id);
-}
-function rncResolver(i){
-  if(!currentUser()||!canOperateStock())return alert('⛔ Seu perfil não tem permissão para alterar RNC.');
-  const r=rncLista().find(x=>String(x.id)===String(i));if(!r||rncStatus(r)==='Resolvida')return;
-  const retorno=prompt(`Resolver ${r.numero}.\n\nRetorno do fornecedor / como foi resolvido (opcional):`,'');
-  if(retorno===null)return;
-  r.status='Resolvida';r.retorno=String(retorno).trim();r.resolvidaData=hojeISO();r.resolvidaPor=usuarioAtualNome();
-  registrarAuditoria('RNC','Marcou RNC como resolvida',`${r.numero} · ${r.prod}`);
-  save();
-}
-function rncReabrir(i){
-  if(!currentUser()||!canOperateStock())return alert('⛔ Seu perfil não tem permissão para alterar RNC.');
-  const r=rncLista().find(x=>String(x.id)===String(i));if(!r||rncStatus(r)!=='Resolvida')return;
-  if(!confirm(`Reabrir ${r.numero}?`))return;
-  r.status='Aberta';delete r.retorno;delete r.resolvidaData;delete r.resolvidaPor;
-  registrarAuditoria('RNC','Reabriu RNC',`${r.numero} · ${r.prod}`);
-  save();
-}
-function rncFiltradas(){
-  const busca=(document.getElementById('rncBusca')?.value||'').toLowerCase().trim(),tipo=document.getElementById('rncTipoFiltro')?.value||'',st=document.getElementById('rncStatusFiltro')?.value||'';
-  return rncLista().filter(x=>(!tipo||x.tipo===tipo)&&(!st||rncStatus(x)===st)&&(!busca||`${x.numero} ${x.prod} ${x.categoria} ${x.tipo} ${x.qtd||''} ${x.nota||''} ${x.descricao||''} ${x.retorno||''}`.toLowerCase().includes(busca)));
-}
-function limparFiltrosRnc(){['rncBusca','rncTipoFiltro','rncStatusFiltro'].forEach(i=>{const e=document.getElementById(i);if(e)e.value='';});renderRnc();}
-function renderRnc(){
-  rncPopularCategorias();
-  const box=document.getElementById('rncList');if(!box)return;
-  const todas=rncLista(),total=todas.length,abertas=todas.filter(r=>rncStatus(r)==='Aberta').length;
-  [['rncCount',total],['rncAbertas',abertas],['rncResolvidas',total-abertas]].forEach(([i,v])=>{const e=document.getElementById(i);if(e)e.textContent=v;});
-  const list=rncFiltradas().slice().reverse();
-  if(!list.length){box.innerHTML='<div class="req-empty">'+(total?'Nenhuma RNC encontrada com esses filtros.':'Nenhuma RNC registrada ainda.')+'</div>';return;}
-  const podeOperar=!!currentUser()&&canOperateStock();
-  box.innerHTML=list.map(r=>{
-    const res=rncStatus(r)==='Resolvida';
-    return `<div class="req-card rnc-item ${res?'rnc-resolvida':'rnc-aberta'}"><div class="req-card-top"><div><div class="req-code">${esc(r.numero)}</div><div class="req-meta">📦 ${esc(r.prod)} · ${esc(r.categoria||'Sem categoria')}${r.qtd?`<br>🔢 Quantidade: ${esc(rncQtdTxt(r,true))}${r.un?` · Unidade: ${esc(r.un)}`:''}`:''}<br>📅 ${esc(formatDateBR(r.data))} · 👤 ${esc(r.usuario||'—')}${r.nota?`<br>🧾 Nota fiscal ${esc(r.nota)}`:''}</div></div><span class="req-badge ${res?'status-entregue':'status-pendente'}">${res?'Resolvida':'Aberta'}</span></div><div class="pend-items"><span>${esc(r.tipo)}</span></div>${r.descricao?`<div class="req-bottom rnc-desc">${esc(r.descricao)}</div>`:''}${r.foto?`<img class="rnc-thumb" src="${r.foto}" alt="Foto da ${esc(r.numero)}" onclick="rncAbrirFoto('${esc(r.id)}')">`:''}${res?`<div class="rnc-retorno"><b>Resolvida em ${esc(formatDateBR(r.resolvidaData))}</b>${r.resolvidaPor?` por ${esc(r.resolvidaPor)}`:''}${r.retorno?`<div>${esc(r.retorno)}</div>`:''}</div>`:''}<div class="pend-actions">${podeOperar?(res?`<button class="secondary" type="button" onclick="rncReabrir('${esc(r.id)}')">🔄 Reabrir</button>`:`<button class="green" type="button" onclick="rncResolver('${esc(r.id)}')">✅ Marcar como resolvida</button>`):''}<button class="secondary" type="button" onclick="rncExportarPDF('${esc(r.id)}')">📄 PDF</button><button class="secondary" type="button" onclick="rncExportarExcel('${esc(r.id)}')">📊 Excel</button>${canDelete()?`<button class="danger" type="button" onclick="rncExcluir('${esc(r.id)}')">🗑️ Excluir</button>`:''}</div></div>`;
-  }).join('');
-  normalizeIcons(box);
-}
-function rncAbrirFoto(i){
-  const r=rncLista().find(x=>String(x.id)===String(i));if(!r||!r.foto)return;
-  const ov=document.createElement('div');ov.className='rnc-lightbox';
-  ov.innerHTML=`<img src="${r.foto}" alt="Foto da ${esc(r.numero)}"><button type="button">Fechar</button>`;
-  ov.onclick=()=>ov.remove();document.body.appendChild(ov);
-}
-function rncExcluir(i){
-  if(!canDelete())return denyDelete();
-  const r=rncLista().find(x=>String(x.id)===String(i));if(!r)return;
-  if(!confirm(`Excluir ${r.numero} (${r.prod})?`))return;
-  registrarAuditoria('RNC','Excluiu RNC',`${r.numero} · ${r.prod}`);
-  db.rnc=db.rnc.filter(x=>String(x.id)!==String(i));save();
-}
-function rncRelatorio(lista,titulo){
-  const ab=lista.filter(r=>rncStatus(r)==='Aberta').length;
-  return {meta:[],titulo,arquivo:'rnc',
-    resumo:[['RNCs listadas',lista.length,'num'],['Abertas',ab,'num'],['Resolvidas',lista.length-ab,'num']],
-    secoes:[{nome:'RNC',titulo:'Registros de RNC',colunas:[{t:'Número',tipo:'texto'},{t:'Data',tipo:'data'},{t:'Categoria',tipo:'texto',larg:20},{t:'Produto',tipo:'texto',larg:34},{t:'Quantidade',tipo:'num'},{t:'Unidade',tipo:'texto'},{t:'Nota fiscal',tipo:'texto',larg:14},{t:'Tipo de problema',tipo:'texto',larg:32},{t:'Descrição',tipo:'texto',larg:46},{t:'Status',tipo:'texto'},{t:'Retorno do fornecedor',tipo:'texto',larg:40},{t:'Resolvida em',tipo:'data'},{t:'Foto',tipo:'texto'},{t:'Solicitante',tipo:'texto',larg:26}],
-      linhas:lista.map(r=>[r.numero,r.data,r.categoria||'Sem categoria',r.prod,Number.isFinite(Number(r.qtd))&&r.qtd>0?Number(r.qtd):'',r.un||'',r.nota||'',r.tipo,r.descricao||'',rncStatus(r),r.retorno||'',r.resolvidaData||'',r.foto?'Sim':'Não',r.usuario||''])}]};
-}
-function rncExportarExcel(i){
-  const r=rncLista().find(x=>String(x.id)===String(i));if(!r)return;
-  try{const rel=rncRelatorio([r],'RNC '+r.numero);rel.arquivo='rnc_'+r.numero;rel.resumo=[];exportarExcel(rel);}
-  catch(e){console.error('Falha ao exportar RNC',e);alert('❌ Não foi possível gerar o arquivo.');}
-}
-function rncExportarPDF(i){
-  const r=rncLista().find(x=>String(x.id)===String(i));if(!r)return;
-  document.getElementById('relPrintDoc')?.remove();document.getElementById('relPrintPageStyle')?.remove();
-  const emitido=_agoraTxt(),res=rncStatus(r)==='Resolvida';
-  const meta=[['Data da RNC',formatDateBR(r.data)],['Status',rncStatus(r)],['Categoria',r.categoria||'Sem categoria'],['Produto',r.prod],['Quantidade',rncQtdTxt(r,true)||'—'],['Unidade de medida',r.un||'—'],['Nota fiscal',r.nota||'—'],['Tipo de problema',r.tipo],['Solicitante',r.usuario||'—'],['Emitido em',emitido]];
-  const retorno=res?`<div class="rel-sec">Resolução</div><div class="rnc-doc-texto"><b>Resolvida em ${esc(formatDateBR(r.resolvidaData))}</b>${r.resolvidaPor?` por ${esc(r.resolvidaPor)}`:''}${r.retorno?`<br>${esc(r.retorno)}`:''}</div>`:'';
-  const doc=document.createElement('div');doc.id='relPrintDoc';
-  doc.innerHTML=`<div class="rel-page"><div class="rel-top"><span class="rel-brand">O ESTOQUISTA</span><span class="rel-doc">RNC — Registro de não conformidade</span></div><div class="rel-title">${esc(r.numero)}</div><div class="rel-meta">${meta.map(([a,b])=>`<div><span>${esc(a)}</span><b>${esc(b)}</b></div>`).join('')}</div><div class="rel-sec">Descrição</div><div class="rnc-doc-texto">${r.descricao?esc(r.descricao):'<i>Sem descrição.</i>'}</div>${retorno}${r.foto?`<div class="rel-sec">Foto</div><div class="rnc-doc-foto"><img src="${r.foto}" alt="Foto da ${esc(r.numero)}"></div>`:''}</div><div class="rel-foot">Documento gerado por O Estoquista em ${esc(emitido)}</div>`;
-  document.body.appendChild(doc);
-  const est=document.createElement('style');est.id='relPrintPageStyle';
-  est.textContent='@page{size:A4 portrait;margin:12mm 10mm 16mm}';document.head.appendChild(est);
-  const tituloOriginal=document.title;document.title=`${r.numero} - ${r.prod}`;
-  document.body.classList.add('imprimindo-rel');
-  let limpo=false;
-  const limpar=()=>{if(limpo)return;limpo=true;document.body.classList.remove('imprimindo-rel');doc.remove();est.remove();document.title=tituloOriginal;window.removeEventListener('afterprint',limpar);};
-  window.addEventListener('afterprint',limpar);window.setTimeout(limpar,300000);
-  Promise.all([...doc.querySelectorAll('img')].map(im=>im.decode?im.decode().catch(()=>{}):null)).then(()=>window.setTimeout(()=>window.print(),150));
-}
-
-/* ---------- Malote NF ---------- */
-let maloteDraft=[],maloteEditId=null;
-function maloteLista(){if(!Array.isArray(db.malotes))db.malotes=[];return db.malotes;}
-function maloteProximoNumero(){
-  const nums=maloteLista().map(m=>parseInt(String(m.numero||'').replace(/\D/g,''),10)).filter(Number.isFinite);
-  return 'MAL-'+String((nums.length?Math.max(...nums):0)+1).padStart(4,'0');
-}
-function maloteSemanaAtual(){
-  const d=new Date();d.setHours(0,0,0,0);
-  const seg=new Date(d);seg.setDate(d.getDate()-((d.getDay()+6)%7));
-  const dom=new Date(seg);dom.setDate(seg.getDate()+6);
-  const t=new Date(seg);t.setDate(seg.getDate()+3);
-  const jan1=new Date(t.getFullYear(),0,1);
-  const sem=1+Math.floor(((t-jan1)/86400000-3+((jan1.getDay()+6)%7))/7);
-  const f=x=>String(x.getDate()).padStart(2,'0')+'/'+String(x.getMonth()+1).padStart(2,'0');
-  return `Semana ${sem} (${f(seg)} a ${f(dom)})`;
-}
-function maloteResetForm(){
-  maloteEditId=null;maloteDraft=[];
-  document.getElementById('maloteSemana').value=maloteSemanaAtual();
-  document.getElementById('malotePara').value='';
-  document.getElementById('maloteData').value=hojeISO();
-  ['maloteNfNum','maloteNfForn','maloteNfEmissao','maloteNfVenc'].forEach(i=>{document.getElementById(i).value='';});
-  document.getElementById('maloteFormTitulo').textContent='Novo malote';
-  document.getElementById('maloteSalvarBtn').textContent='Salvar malote';
-  document.getElementById('maloteCancelarBtn').style.display='none';
-  maloteRenderDraft();
-}
-function maloteInit(){maloteResetForm();}
-function maloteRenderDraft(){
-  const box=document.getElementById('maloteDraftList');if(!box)return;
-  if(!maloteDraft.length){box.innerHTML='<div class="muted malote-vazio">Nenhuma NF adicionada ainda.</div>';return;}
-  box.innerHTML=`<div class="malote-draft-head">${maloteDraft.length} NF(s) neste malote</div>`+maloteDraft.map((n,i)=>`<div class="malote-nf-row"><div class="malote-nf-info"><b>NF ${esc(n.numero)}</b> · ${esc(n.fornecedor)}<small>Emissão ${esc(n.emissao?formatDateBR(n.emissao):'—')} · Vencimento ${esc(n.vencimento?formatDateBR(n.vencimento):'—')}</small></div><button type="button" class="trash-btn action-btn" onclick="maloteRemoverNf(${i})" aria-label="Remover NF">🗑️</button></div>`).join('');
-  normalizeIcons(box);
-}
-function maloteRemoverNf(i){maloteDraft.splice(i,1);maloteRenderDraft();}
-function maloteAddNf(){
-  const num=document.getElementById('maloteNfNum').value.trim(),forn=document.getElementById('maloteNfForn').value.trim();
-  const em=document.getElementById('maloteNfEmissao').value,ve=document.getElementById('maloteNfVenc').value;
-  if(!num)return alert('Informe o número da NF.')||false;
-  if(!forn)return alert('Informe o fornecedor.')||false;
-  if(em&&ve&&ve<em)return alert('O vencimento não pode ser anterior à data de emissão.')||false;
-  if(maloteDraft.some(n=>n.numero.toLowerCase()===num.toLowerCase()&&n.fornecedor.toLowerCase()===forn.toLowerCase()))return alert('Esta NF deste fornecedor já foi adicionada ao malote.')||false;
-  maloteDraft.push({id:id(),numero:num,fornecedor:forn,emissao:em,vencimento:ve});
-  document.getElementById('maloteNfNum').value='';document.getElementById('maloteNfVenc').value='';
-  maloteRenderDraft();document.getElementById('maloteNfNum').focus();
-  return true;
-}
-function maloteSalvar(){
-  if(!currentUser()||!canOperateStock())return alert('⛔ Seu perfil não tem permissão para criar malotes.');
-  // Se a pessoa preencheu uma NF e esqueceu de tocar em "Adicionar NF", adiciona automaticamente.
-  if(document.getElementById('maloteNfNum').value.trim()){
-    if(maloteAddNf()!==true)return;
-  }
-  const semana=document.getElementById('maloteSemana').value.trim(),para=document.getElementById('malotePara').value.trim(),data=document.getElementById('maloteData').value;
-  if(!semana)return alert('Informe a semana.');
-  if(!para)return alert('Informe para quem é o malote (campo "Para:").');
-  if(!data)return alert('Informe a data.');
-  if(!maloteDraft.length)return alert('Adicione pelo menos uma NF ao malote.');
-  const nfs=maloteDraft.map(n=>({...n}));
-  let m,anterior=null;
-  if(maloteEditId){
-    m=maloteLista().find(x=>String(x.id)===String(maloteEditId));
-    if(!m){maloteResetForm();return alert('Malote não encontrado.');}
-    anterior={...m};
-    Object.assign(m,{semana,para,data,nfs,editadoEm:new Date().toISOString(),editadoPor:usuarioAtualNome()});delete m.assinatura;
-    registrarAuditoria('Malote','Editou malote',`${m.numero} · ${nfs.length} NF(s)`);
-  }else{
-    m={id:id(),numero:maloteProximoNumero(),semana,para,data,nfs,criadoEm:new Date().toISOString(),usuario:usuarioAtualNome()};
-    maloteLista().push(m);
-    registrarAuditoria('Malote','Criou malote',`${m.numero} · ${nfs.length} NF(s) · para ${para}`);
-  }
-  if(!save()){
-    if(anterior){Object.keys(m).forEach(k=>delete m[k]);Object.assign(m,anterior);}else db.malotes=db.malotes.filter(x=>x.id!==m.id);
-    return alert('❌ Não foi possível salvar o malote. Tente novamente.');
-  }
-  const numero=m.numero,idSalvo=m.id,novo=!anterior;
-  maloteResetForm();
-  if(confirm(`✅ ${numero} ${novo?'criado':'atualizado'} com ${nfs.length} NF(s).\n\nDeseja gerar o PDF agora?`))maloteExportarPDF(idSalvo);
-}
-function maloteEditar(i){
-  if(!currentUser()||!canOperateStock())return alert('⛔ Seu perfil não tem permissão para editar malotes.');
-  const m=maloteLista().find(x=>String(x.id)===String(i));if(!m)return;
-  maloteEditId=m.id;maloteDraft=(m.nfs||[]).map(n=>({...n}));
-  document.getElementById('maloteSemana').value=m.semana||'';
-  document.getElementById('malotePara').value=m.para||'';
-  document.getElementById('maloteData').value=m.data||hojeISO();
-  ['maloteNfNum','maloteNfForn','maloteNfEmissao','maloteNfVenc'].forEach(x=>{document.getElementById(x).value='';});
-  document.getElementById('maloteFormTitulo').textContent='Editando '+m.numero;
-  document.getElementById('maloteSalvarBtn').textContent='Salvar alterações';
-  document.getElementById('maloteCancelarBtn').style.display='';
-  maloteRenderDraft();
-  document.querySelector('#malote .malote-form')?.scrollIntoView({behavior:'smooth',block:'start'});
-}
-function maloteCancelarEdicao(){maloteResetForm();}
-function maloteExcluir(i){
-  if(!canDelete())return denyDelete();
-  const m=maloteLista().find(x=>String(x.id)===String(i));if(!m)return;
-  if(!confirm(`Excluir ${m.numero} com ${(m.nfs||[]).length} NF(s)?`))return;
-  registrarAuditoria('Malote','Excluiu malote',`${m.numero} · para ${m.para}`);
-  db.malotes=db.malotes.filter(x=>String(x.id)!==String(i));
-  if(String(maloteEditId)===String(i))maloteResetForm();
-  save();
-}
-function maloteFiltrados(){
-  const q=(document.getElementById('maloteBusca')?.value||'').toLowerCase().trim();
-  return maloteLista().filter(m=>!q||`${m.numero} ${m.semana} ${m.para} ${(m.nfs||[]).map(n=>n.numero+' '+n.fornecedor).join(' ')}`.toLowerCase().includes(q));
-}
-function renderMalote(){
-  const box=document.getElementById('maloteList');if(!box)return;
-  const todos=maloteLista();
-  const c=document.getElementById('maloteCount'),n=document.getElementById('maloteNfCount');
-  if(c)c.textContent=todos.length;if(n)n.textContent=todos.reduce((s,m)=>s+(m.nfs||[]).length,0);
-  const dl=document.getElementById('maloteFornecedores');
-  if(dl){const forn=[...new Set(todos.flatMap(m=>(m.nfs||[]).map(x=>x.fornecedor)).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'pt-BR'));const html=forn.map(f=>`<option value="${esc(f)}"></option>`).join('');if(dl.dataset.sig!==html){dl.innerHTML=html;dl.dataset.sig=html;}}
-  const list=maloteFiltrados().slice().reverse();
-  if(!list.length){box.innerHTML='<div class="req-empty">'+(todos.length?'Nenhum malote encontrado.':'Nenhum malote criado ainda.')+'</div>';return;}
-  const podeOperar=!!currentUser()&&canOperateStock();
-  box.innerHTML=list.map(m=>{
-    const nfs=m.nfs||[];
-    return `<div class="req-card malote-item"><div class="req-card-top"><div><div class="req-code">${esc(m.numero)}</div><div class="req-meta">📅 ${esc(formatDateBR(m.data))} · ${esc(m.semana)}<br>👤 Para: ${esc(m.para)}</div></div><span class="req-badge status-separando">${nfs.length} NF(s)</span></div><details class="malote-det"><summary>${nfs.length} NF(s) neste malote</summary>${nfs.map(x=>`<div class="malote-nf-row"><div class="malote-nf-info"><b>NF ${esc(x.numero)}</b> · ${esc(x.fornecedor)}<small>Emissão ${esc(x.emissao?formatDateBR(x.emissao):'—')} · Vencimento ${esc(x.vencimento?formatDateBR(x.vencimento):'—')}</small></div></div>`).join('')}</details><div class="pend-actions">${podeOperar?`<button class="secondary" type="button" onclick="maloteEditar('${esc(m.id)}')">✏️ Editar</button>`:''}<button class="secondary" type="button" onclick="maloteExportarPDF('${esc(m.id)}')">📄 PDF</button><button class="secondary" type="button" onclick="maloteExportarExcel('${esc(m.id)}')">📊 Excel</button>${canDelete()?`<button class="danger" type="button" onclick="maloteExcluir('${esc(m.id)}')">🗑️ Excluir</button>`:''}</div></div>`;
-  }).join('');
-  normalizeIcons(box);
-}
-function maloteRelatorioLista(lista){
-  const linhas=[];
-  lista.forEach(m=>(m.nfs||[]).forEach(x=>linhas.push([m.numero,m.semana,m.para,m.data,x.numero,x.fornecedor,x.emissao||'',x.vencimento||''])));
-  return {meta:[],titulo:'Malote NF — notas fiscais enviadas',arquivo:'malote_nf',
-    resumo:[['Malotes',lista.length,'num'],['NFs',linhas.length,'num']],
-    secoes:[{nome:'Malote NF',titulo:'Notas fiscais por malote',colunas:[{t:'Malote',tipo:'texto'},{t:'Semana',tipo:'texto',larg:28},{t:'Para',tipo:'texto',larg:24},{t:'Data',tipo:'data'},{t:'Nº da NF',tipo:'texto'},{t:'Fornecedor',tipo:'texto',larg:34},{t:'Emissão',tipo:'data'},{t:'Vencimento',tipo:'data'}],linhas}]};
-}
-function maloteExportarExcel(i){
-  const m=maloteLista().find(x=>String(x.id)===String(i));if(!m)return;
-  try{
-    const nfs=m.nfs||[];
-    exportarExcel({meta:[],titulo:'Malote '+m.numero,arquivo:'malote_'+m.numero,
-      resumo:[['Semana',m.semana||'','texto'],['Para:',m.para||'','texto'],['Data',m.data||'','data'],['Total de NFs',nfs.length,'num']],
-      secoes:[{nome:'Malote',titulo:'Malote '+m.numero,colunas:[{t:'Nº da NF',tipo:'texto'},{t:'Fornecedor',tipo:'texto',larg:34},{t:'Data de emissão',tipo:'data'},{t:'Vencimento',tipo:'data'}],
-        linhas:nfs.map(x=>[x.numero,x.fornecedor,x.emissao||'',x.vencimento||''])}]});
-  }catch(e){console.error('Falha ao exportar malote',e);alert('❌ Não foi possível gerar o arquivo.');}
-}
-function maloteExportarPDF(i){
-  const m=maloteLista().find(x=>String(x.id)===String(i));if(!m)return;
-  document.getElementById('relPrintDoc')?.remove();document.getElementById('relPrintPageStyle')?.remove();
-  const nfs=m.nfs||[],emitido=_agoraTxt();
-  const meta=[['Semana',m.semana||'—'],['Para:',m.para||'—'],['Data',formatDateBR(m.data)],['Total de NFs',String(nfs.length)],['Emitido em',emitido]];
-  const tabela=`<table class="rel-table"><thead><tr><th class="rel-c">#</th><th class="rel-l">Nº da NF</th><th class="rel-l">Fornecedor</th><th class="rel-c">Data de emissão</th><th class="rel-c">Vencimento</th></tr></thead><tbody>${nfs.map((x,k)=>`<tr><td class="rel-c">${k+1}</td><td class="rel-l">${esc(x.numero)}</td><td class="rel-l">${esc(x.fornecedor)}</td><td class="rel-c">${esc(x.emissao?formatDateBR(x.emissao):'')}</td><td class="rel-c">${esc(x.vencimento?formatDateBR(x.vencimento):'')}</td></tr>`).join('')}</tbody></table>`;
-  const assin=`<div class="mal-assin"><div class="mal-assin-col"><div class="mal-assin-espaco mal-assin-data">${esc(formatDateBR(m.data))}</div><div class="mal-assin-linha">Data</div></div><div class="mal-assin-col mal-assin-larga"><div class="mal-assin-espaco"></div><div class="mal-assin-linha">Assinatura</div></div></div>`;
-  const doc=document.createElement('div');doc.id='relPrintDoc';
-  doc.innerHTML=`<div class="rel-page"><div class="rel-top"><span class="rel-brand">O ESTOQUISTA</span><span class="rel-doc">Malote de notas fiscais</span></div><div class="rel-title">${esc(m.numero)}</div><div class="rel-meta">${meta.map(([a,b])=>`<div><span>${esc(a)}</span><b>${esc(b)}</b></div>`).join('')}</div><div class="rel-sec">Notas fiscais</div>${tabela}${assin}</div><div class="rel-foot">Documento gerado por O Estoquista em ${esc(emitido)}</div>`;
-  document.body.appendChild(doc);
-  const est=document.createElement('style');est.id='relPrintPageStyle';
-  est.textContent='@page{size:A4 portrait;margin:12mm 10mm 16mm}';document.head.appendChild(est);
-  const tituloOriginal=document.title;document.title=`${m.numero} - Malote NF`;
-  document.body.classList.add('imprimindo-rel');
-  let limpo=false;
-  const limpar=()=>{if(limpo)return;limpo=true;document.body.classList.remove('imprimindo-rel');doc.remove();est.remove();document.title=tituloOriginal;window.removeEventListener('afterprint',limpar);};
-  window.addEventListener('afterprint',limpar);window.setTimeout(limpar,300000);
-  Promise.all([...doc.querySelectorAll('img')].map(im=>im.decode?im.decode().catch(()=>{}):null)).then(()=>window.setTimeout(()=>window.print(),150));
+  box.innerHTML=exportacoesPermitidas().map(t=>`<div class="export-row"><strong>${esc(_EXPORT_ROTULOS[t])}</strong><div class="export-btns"><button class="secondary" type="button" onclick="exportarRelatorio('${t}','pdf')">📄 PDF</button><button class="green" type="button" onclick="exportarRelatorio('${t}','xlsx')">📊 Excel</button></div></div>`).join('')||'<p class="muted">Nenhum relatório disponível para o seu perfil.</p>';
 }
 
 /* ---------- Aplicativo instalável (PWA) ---------- */
@@ -2409,7 +1908,7 @@ function atualizarCardInstalar(){
   const card=document.getElementById('cardInstalarApp');if(!card)return;
   const btn=document.getElementById('btnInstalarApp'),txt=document.getElementById('instalarTexto');
   const ios=/iphone|ipad|ipod/i.test(navigator.userAgent);
-  if(appJaInstalado()){if(txt)txt.innerHTML='<span class="menu-ok"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="m8 12.5 2.8 2.8L16 9.5"/></svg>O Estoquista já está instalado neste aparelho.</span>';if(btn)btn.style.display='none';return;}
+  if(appJaInstalado()){if(txt)txt.textContent='✅ O Estoquista já está instalado neste aparelho.';if(btn)btn.style.display='none';return;}
   if(_promptInstalar){if(txt)txt.textContent='Instale o O Estoquista na tela inicial do aparelho: abre em tela cheia, como um aplicativo.';if(btn)btn.style.display='inline-block';return;}
   if(btn)btn.style.display='none';
   if(txt)txt.textContent=ios?'No iPhone/iPad: abra este site no Safari, toque em Compartilhar e escolha "Adicionar à Tela de Início".':'Para instalar: abra o menu do navegador (⋮) e escolha "Instalar aplicativo" ou "Adicionar à tela inicial".';
@@ -2429,6 +1928,75 @@ montarBarrasExportacao();
 atualizarCardInstalar();
 
 
+function addMaloteNFRow(data={}){
+  const tbody=document.getElementById("maloteNFRows"); if(!tbody)return;
+  const tr=document.createElement("tr");
+  tr.innerHTML=`<td><input aria-label="Número da NF" class="mn-numero" placeholder="Número da NF" value="${esc(data.numero||"")}"></td><td><input aria-label="Fornecedor" class="mn-fornecedor" placeholder="Nome do fornecedor" value="${esc(data.fornecedor||"")}"></td><td><input aria-label="Data de emissão" class="mn-emissao" type="date" value="${esc(data.emissao||"")}"></td><td><input aria-label="Data de vencimento" class="mn-vencimento" type="date" value="${esc(data.vencimento||"")}"></td><td><button type="button" class="trash-btn" aria-label="Remover nota fiscal" onclick="this.closest('tr').remove()">Remover</button></td>`;
+  tbody.appendChild(tr);
+}
+function resetMaloteForm(){
+  ["maloteSemana","malotePara"].forEach(id=>{const el=document.getElementById(id);if(el)el.value="";});
+  const d=document.getElementById("maloteData");if(d)d.value=hojeISO();
+  const rows=document.getElementById("maloteNFRows");if(rows)rows.innerHTML="";
+  addMaloteNFRow();
+}
+async function createMaloteNF(){
+  const semana=document.getElementById("maloteSemana")?.value.trim()||"";
+  const para=document.getElementById("malotePara")?.value.trim()||"";
+  const data=document.getElementById("maloteData")?.value||"";
+  const notas=[...document.querySelectorAll("#maloteNFRows tr")].map(tr=>({
+    numero:tr.querySelector(".mn-numero")?.value.trim()||"",
+    fornecedor:tr.querySelector(".mn-fornecedor")?.value.trim()||"",
+    emissao:tr.querySelector(".mn-emissao")?.value||"",
+    vencimento:tr.querySelector(".mn-vencimento")?.value||""
+  })).filter(n=>n.numero||n.fornecedor||n.emissao||n.vencimento);
+  if(!semana||!para||!data){alert("Preencha Semana, Para e Data do malote.");return;}
+  if(!notas.length){alert("Adicione pelo menos uma nota fiscal.");return;}
+  if(notas.some(n=>!n.numero||!n.fornecedor||!n.emissao||!n.vencimento)){alert("Complete todos os campos de cada nota fiscal.");return;}
+  if(!Array.isArray(db.malotesNF))db.malotesNF=[];
+  const malote={id:id(),semana,para,data,notas,criadoEm:new Date().toISOString(),criadoPor:usuarioAtualNome()};
+  db.malotesNF.unshift(malote);
+  registrarAuditoria("Sistema","Malote NF criado",`Semana ${semana}; ${notas.length} nota(s); para ${para}`);
+
+  // Grava primeiro no aparelho; depois aguarda confirmação do Supabase quando online.
+  if(!persistLocalOnly()){
+    db.malotesNF=db.malotesNF.filter(m=>String(m.id)!==String(malote.id));
+    alert("Não foi possível salvar o malote neste aparelho. Verifique o espaço disponível e tente novamente.");
+    return;
+  }
+  if(cloudReady){
+    const sincronizado=await cloudSave();
+    if(!sincronizado){
+      renderMalotesNF();
+      return;
+    }
+  }
+  resetMaloteForm();
+  renderMalotesNF();
+  alert(cloudReady?"Malote salvo e sincronizado com sucesso.":"Malote salvo neste aparelho. A sincronização online ainda não está disponível nesta sessão.");
+}
+function excluirMaloteNF(maloteId){
+  if(!isAdmin()){alert("Apenas o Administrador pode excluir malotes.");return;}
+  const m=(db.malotesNF||[]).find(x=>String(x.id)===String(maloteId));
+  if(!m||!confirm(`Excluir o malote da semana ${m.semana} com ${m.notas.length} NF(s)?`))return;
+  db.malotesNF=db.malotesNF.filter(x=>String(x.id)!==String(maloteId));
+  registrarAuditoria("Sistema","Malote NF excluído",`Semana ${m.semana}`);save();renderMalotesNF();
+}
+function formatarDataMalote(v){if(!v)return "—";const p=String(v).split("-");return p.length===3?`${p[2]}/${p[1]}/${p[0]}`:v;}
+function imprimirMaloteNF(maloteId){
+  const m=(db.malotesNF||[]).find(x=>String(x.id)===String(maloteId));if(!m)return;
+  const rows=m.notas.map(n=>`<tr><td>${esc(n.numero)}</td><td>${esc(n.fornecedor)}</td><td>${formatarDataMalote(n.emissao)}</td><td>${formatarDataMalote(n.vencimento)}</td></tr>`).join("");
+  const w=window.open("","_blank");if(!w){alert("Permita a abertura de janelas para imprimir o malote.");return;}
+  w.document.write(`<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><title>Malote NF - ${esc(m.semana)}</title><style>body{font-family:Arial,sans-serif;color:#172033;margin:32px}h1{text-align:center;font-size:23px;margin-bottom:6px}.sub{text-align:center;color:#555;margin-bottom:28px}.meta{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:22px}.field{border-bottom:1px solid #888;padding:8px 2px}table{width:100%;border-collapse:collapse}th,td{border:1px solid #555;padding:10px;text-align:left;font-size:12px}th{background:#f0f2f5}.signatures{display:flex;gap:40px;margin-top:65px}.sign{flex:1;text-align:center;border-top:1px solid #222;padding-top:8px}.date{margin-top:40px;text-align:right}@media print{body{margin:15mm}}</style></head><body><h1>MALOTE DE NOTAS FISCAIS</h1><div class="sub">O Estoquista · Controle de documentos</div><div class="meta"><div class="field"><b>Semana:</b> ${esc(m.semana)}</div><div class="field"><b>Para:</b> ${esc(m.para)}</div><div class="field"><b>Data:</b> ${formatarDataMalote(m.data)}</div><div class="field"><b>Quantidade de NF:</b> ${m.notas.length}</div></div><table><thead><tr><th>Número da NF</th><th>Fornecedor</th><th>Data de emissão</th><th>Vencimento</th></tr></thead><tbody>${rows}</tbody></table><div class="date">Data: ____ / ____ / ______</div><div class="signatures"><div class="sign">Assinatura de quem enviou</div><div class="sign">Assinatura de quem recebeu</div></div><script>window.onload=()=>window.print();</script></body></html>`);
+  w.document.close();
+}
+function renderMalotesNF(){
+  const list=document.getElementById("maloteNFList");if(!list)return;
+  const items=db.malotesNF||[];const count=document.getElementById("maloteNFCount");if(count)count.textContent=`${items.length} malote(s)`;
+  if(!items.length){list.innerHTML='<div class="empty-products">Nenhum malote cadastrado ainda.</div>';return;}
+  list.innerHTML=items.map(m=>`<div class="card malote-saved"><div class="malote-saved-head"><div><h3>Semana: ${esc(m.semana)}</h3><div class="muted">Para: ${esc(m.para)} · Data: ${formatarDataMalote(m.data)} · ${m.notas.length} NF(s)</div></div><div class="actions"><button type="button" onclick="imprimirMaloteNF('${esc(m.id)}')">🖨️ Imprimir / PDF</button>${isAdmin()?`<button type="button" class="trash-btn" onclick="excluirMaloteNF('${esc(m.id)}')">Excluir</button>`:""}</div></div><div class="malote-table-wrap"><table><thead><tr><th>Número da NF</th><th>Fornecedor</th><th>Emissão</th><th>Vencimento</th></tr></thead><tbody>${m.notas.map(n=>`<tr><td>${esc(n.numero)}</td><td>${esc(n.fornecedor)}</td><td>${formatarDataMalote(n.emissao)}</td><td>${formatarDataMalote(n.vencimento)}</td></tr>`).join("")}</tbody></table></div></div>`).join("");
+}
+
 document.querySelectorAll("nav button").forEach(b=>{ b.setAttribute("type","button"); b.onclick=()=>{
   if(b.dataset.adminOnly==="1" && !isAdmin()){ alert("🔒 Acesso restrito ao Administrador."); return; }
   if(!viewPermitida(b.dataset.view)){ alert("🔒 Seu perfil não tem acesso a esta área."); return; }
@@ -2438,15 +2006,20 @@ document.querySelectorAll("nav button").forEach(b=>{ b.setAttribute("type","butt
   view.classList.add("active");
   document.querySelectorAll("nav button").forEach(x=>x.classList.remove("active"));
   b.classList.add("active");
+  if(b.dataset.view==="maloteNF")renderMalotesNF();
   if(b.dataset.view==="relatorios" && !isAdmin()){return;}
   if(b.dataset.view==="auditoria" && !isAdmin()){return;}
 }; });
+document.querySelectorAll('[data-dashboard-view]').forEach(btn=>{btn.addEventListener('click',()=>{const alvo=document.querySelector(`nav button[data-view="${btn.dataset.dashboardView}"]`);if(alvo)alvo.click();});});
 render();
+if(document.getElementById("maloteData"))document.getElementById("maloteData").value=hojeISO();
+if(document.getElementById("maloteNFRows")&&!document.getElementById("maloteNFRows").children.length)addMaloteNFRow();
+renderMalotesNF();
 setInterval(renderSaudacao,60000);
 console.info("O Estoquista iniciado: dados locais carregados com sucesso.");
 if(document.getElementById("mData")) document.getElementById("mData").value=new Date().toISOString().slice(0,10);
 if(document.getElementById("eData")) document.getElementById("eData").value=hojeISO();
-updateEmprestimoUnit();renderEmprestimoDraft();maloteInit();
+updateEmprestimoUnit();renderEmprestimoDraft();
 if(document.getElementById("inventarioData")) document.getElementById("inventarioData").value=hojeISO();
 if(document.getElementById("relatorioMes")) document.getElementById("relatorioMes").value=mesAtualISO();
 
