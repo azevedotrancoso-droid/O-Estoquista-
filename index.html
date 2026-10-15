@@ -67,33 +67,20 @@ function toggleLoginPass(){
 <header aria-label="O Estoquista"><div class="brand"><span class="brand-icon" aria-hidden="true"><img src="logo-mark.png" alt="" width="26" height="31"></span><span>O Estoquista</span></div><small>Controle de estoque,<br>requisições, entradas e saídas</small></header>
 <nav id="nav">
 <button data-view="inicio" class="active">🏠 Início</button><button data-view="produtos">📦 Produtos</button>
-<button data-view="requisicoes">📋 Requisições</button><button data-view="maloteNF">🧾 Malote NF</button><button data-view="pendencias">📌 Pendências</button><button data-view="anotacoes">📝 Anotações</button><button data-view="movimentos">🔄 Entradas/Saídas</button><button data-view="suco">🍊 Suco de Laranja</button><button data-view="gelo">🧊 Gelo</button><button data-view="bebidas">🍸 Bebidas</button><button data-view="inventario">📋 Inventário</button><button data-view="cmv"><span class="nav-icon nav-icon-cmv" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="3.5" y="3.5" width="17" height="17" rx="2"/><path d="M7 16l3.2-3.6 2.7 2.1L17 9"/><path d="M17 9h-3M17 9v3"/></svg></span><span>Análise de CMV</span></button><button data-view="relatorios" data-admin-only="1">📊 Relatórios</button><button data-view="auditoria" data-admin-only="1">🛡️ Auditoria</button>
+<button data-view="requisicoes">📋 Requisições</button><button data-view="pendencias">📌 Pendências</button><button data-view="anotacoes">📝 Anotações</button><button data-view="movimentos">🔄 Entradas/Saídas</button><button data-view="suco">🍊 Suco de Laranja</button><button data-view="gelo">🧊 Gelo</button><button data-view="bebidas">🍸 Bebidas</button><button data-view="inventario">📋 Inventário</button><button data-view="rnc"><span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M6 3h8l4 4v14H6z"/><path d="M14 3v4h4"/><path d="M12 11v4M12 18h.01"/></svg></span><span>RNC</span></button><button data-view="malote"><span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="3" y="6" width="18" height="13" rx="2"/><path d="m3 8 9 6 9-6"/></svg></span><span>Malote NF</span></button><button data-view="cmv"><span class="nav-icon nav-icon-cmv" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="3.5" y="3.5" width="17" height="17" rx="2"/><path d="M7 16l3.2-3.6 2.7 2.1L17 9"/><path d="M17 9h-3M17 9v3"/></svg></span><span>Análise de CMV</span></button><button data-view="relatorios" data-admin-only="1">📊 Relatórios</button><button data-view="auditoria" data-admin-only="1">🛡️ Auditoria</button>
 <button data-view="usuarios" data-admin-only="1">👤 Usuários</button><button data-view="menu">⚙️ Menu</button>
 </nav>
 <main>
 <div class="app-top-actions"><button id="logoutBtn" class="logout-btn" type="button" onclick="logout()" title="Sair da conta" aria-label="Sair da conta"><span class="logout-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M10 5H5v14h5"/><path d="M13 8l4 4-4 4M17 12H9"/></svg></span><span>Sair</span></button></div>
 <section id="inicio" class="view active">
 <div id="saudacaoAdmin" class="greeting-card" style="display:none" aria-live="polite"><div class="greeting-text"><strong id="saudacaoTexto"></strong><span id="saudacaoData"></span></div><div class="greeting-icon" id="saudacaoIcone" aria-hidden="true">☀️</div></div>
-<div class="dashboard-heading"><div><span class="dashboard-eyebrow">VISÃO GERAL DA OPERAÇÃO</span><h2>Painel de controle</h2><p>Acompanhe o estoque e resolva as pendências do dia em um só lugar.</p></div><div class="dashboard-date"><span>Hoje</span><strong id="dashboardHoje">—</strong></div></div>
-<div class="dashboard-kpis grid">
-<div class="card dashboard-kpi kpi-products"><div class="kpi-top"><span class="kpi-icon">▦</span><span class="kpi-label">Produtos cadastrados</span></div><div class="stat" id="sProdutos">0</div><small>Itens no catálogo</small></div>
-<div class="card dashboard-kpi kpi-low"><div class="kpi-top"><span class="kpi-icon">!</span><span class="kpi-label">Estoque baixo</span></div><div class="stat" id="sBaixo">0</div><small>Produtos no mínimo ou abaixo</small></div>
-<div class="card dashboard-kpi kpi-requests"><div class="kpi-top"><span class="kpi-icon">≡</span><span class="kpi-label">Requisições</span></div><div class="stat" id="sReq">0</div><small>Total de solicitações registradas</small></div>
-<div class="card dashboard-kpi kpi-movements"><div class="kpi-top"><span class="kpi-icon">↕</span><span class="kpi-label">Movimentações</span></div><div class="stat" id="sMov">0</div><small>Registros de entrada e saída</small></div>
-<div class="card dashboard-kpi kpi-out"><div class="kpi-top"><span class="kpi-icon">×</span><span class="kpi-label">Estoque zerado</span></div><div class="stat" id="sZerado">0</div><small>Produtos sem saldo disponível</small></div>
-<div class="card dashboard-kpi kpi-pending"><div class="kpi-top"><span class="kpi-icon">◷</span><span class="kpi-label">Aguardando atendimento</span></div><div class="stat" id="sReqPendentes">0</div><small>Requisições pendentes ou em separação</small></div>
+<h2>Painel</h2><div class="grid">
+<div class="card">Produtos cadastrados<div class="stat" id="sProdutos">0</div></div>
+<div class="card">Estoque baixo<div class="stat" id="sBaixo">0</div></div>
+<div class="card">Requisições<div class="stat" id="sReq">0</div></div>
+<div class="card">Movimentações<div class="stat" id="sMov">0</div></div>
 </div>
-<div class="dashboard-section-title"><div><h3>Acesso rápido</h3><p>Atalhos para as tarefas mais utilizadas.</p></div></div>
-<div class="dashboard-shortcuts">
-<button type="button" data-dashboard-view="produtos"><span class="shortcut-icon">＋</span><span><strong>Produtos</strong><small>Cadastrar e consultar</small></span><span class="shortcut-arrow">↗</span></button>
-<button type="button" data-dashboard-view="movimentos"><span class="shortcut-icon">↕</span><span><strong>Entradas e saídas</strong><small>Registrar movimentação</small></span><span class="shortcut-arrow">↗</span></button>
-<button type="button" data-dashboard-view="requisicoes"><span class="shortcut-icon">☷</span><span><strong>Requisições</strong><small>Separar solicitações</small></span><span class="shortcut-arrow">↗</span></button>
-<button type="button" data-dashboard-view="inventario"><span class="shortcut-icon">✓</span><span><strong>Inventário</strong><small>Conferir quantidades</small></span><span class="shortcut-arrow">↗</span></button>
-</div>
-<div class="dashboard-two-col">
-<div class="card stock-alert-card alert-panel"><div class="alert-panel-head"><div><h3>Alertas de estoque</h3><p>Produtos que precisam de atenção</p></div><span class="alert-count" id="baixoCount">0</span></div><div id="baixo" class="alert-list"></div></div>
-<div class="card dashboard-recent-card"><div class="recent-head"><div><h3>Últimas movimentações</h3><p>Atividade recente registrada no sistema</p></div><button type="button" class="secondary" data-dashboard-view="movimentos">Ver todas</button></div><div id="dashboardMovRecentes" class="dashboard-recent-list"><div class="dashboard-empty">Nenhuma movimentação registrada.</div></div></div>
-</div>
+<div class="card stock-alert-card alert-panel"><div class="alert-panel-head"><h3>🚨 Alertas de estoque</h3><span class="alert-count" id="baixoCount">0</span></div><div id="baixo" class="alert-list"></div></div>
 <div class="card monthly-consumption-card">
   <div class="monthly-consumption-head">
     <div><h3>📊 Consumo e gastos do mês</h3><p class="muted">Distribuição dos gastos registrados com suco de laranja e gelo no mês atual.</p></div>
@@ -111,15 +98,17 @@ function toggleLoginPass(){
 <div><label>Categoria</label><select id="pCategoria"><option value="">Selecione a categoria</option></select></div>
 <div><label>Estoque inicial</label><input id="pEst" type="number" min="0" step="any" value="0" inputmode="decimal"></div>
 <div><label>Estoque mínimo</label><input id="pMin" type="number" min="0" step="any" value="0" inputmode="decimal"></div><div><label>Estoque ideal</label><input id="pIdeal" type="number" min="0" step="any" value="0" inputmode="decimal"></div>
+<div><label>Custo unitário (R$) 🔒</label><input id="pCusto" type="number" min="0" step="0.01" placeholder="Opcional · não muda depois de salvo" inputmode="decimal"></div>
 </div><div class="actions"><button data-stock-action="1" data-rh-action="1" onclick="addProduto()">Adicionar produto</button></div>
 <div class="category-create-box"><div><label>Nova categoria</label><input id="novaCategoria" maxlength="60" placeholder="Ex.: Congelados, Hortifruti..."></div><button type="button" data-stock-action="1" onclick="criarCategoria()">＋ Criar categoria</button></div>
+<div id="categoriaExcluirBox" class="category-create-box category-delete-box"><div><label>Excluir categoria</label><select id="excluirCategoriaSel"><option value="">Selecione a categoria</option></select></div><button type="button" class="trash-btn action-btn" onclick="excluirCategoria()" title="Excluir categoria" aria-label="Excluir categoria"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M19 6l-1 15H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/></svg>Excluir categoria</button></div>
 <p class="muted category-help">As categorias criadas ficam salvas no dispositivo e passam a aparecer automaticamente no cadastro, filtros e inventário.</p>
 </div>
 <div class="card products-card">
 <h3>📦 Produtos cadastrados</h3>
 <div class="product-tools">
 <div><label>🔎 Buscar produto</label><input id="buscaProduto" placeholder="Digite nome ou código..." oninput="renderProdutos()"></div>
-<div><label>Filtro de estoque</label><select id="filtroProduto" onchange="renderProdutos()"><option value="todos">Todos os produtos</option><option value="baixo">Estoque baixo</option><option value="normal">Estoque normal</option></select></div>
+<div><label>Filtro de estoque</label><select id="filtroProduto" onchange="renderProdutos()"><option value="todos">Todos os produtos</option><option value="baixo">Estoque baixo</option><option value="normal">Estoque normal</option><option value="semcusto">Sem custo cadastrado</option></select></div>
 <div><label>Categoria</label><select id="filtroCategoriaProduto" onchange="renderProdutos()"><option value="">Todas as categorias</option></select></div>
 </div>
 <div id="prodResumo" class="product-summary"></div>
@@ -141,7 +130,7 @@ function toggleLoginPass(){
 <h3>Nova requisição</h3><div class="grid">
 <div><label>Setor</label><select id="rSetor"><option>Bar</option><option>Cozinha</option></select></div>
 <div><label>Prioridade</label><select id="rPrioridade"><option>Normal</option><option>Alta</option><option>Urgente</option></select></div>
-<div><label>Produto</label><select id="rProd"></select></div><div><label>Quantidade</label><input id="rQtd" type="number" min="0.001" step="any" value="1" inputmode="decimal"></div>
+<div><label>Categoria</label><select id="rCategoria" onchange="filtrarProdutosReq()"></select></div><div><label>Produto</label><select id="rProd"></select></div><div><label>Quantidade</label><input id="rQtd" type="number" min="0.001" step="any" value="1" inputmode="decimal"></div>
 <div><label>Unidade de medida</label><input id="rUn" type="text" readonly placeholder="Automática pelo produto"></div><div><label>Solicitante</label><input id="rSol" placeholder="Nome"></div>
 </div><div class="actions"><button type="button" data-stock-action="1" onclick="addReqItem()">Adicionar item</button><button type="button" class="green" data-stock-action="1" onclick="addReq()">Criar requisição</button></div><div id="reqDraftItems" class="req-items-box"></div></div>
 </section>
@@ -151,14 +140,16 @@ function toggleLoginPass(){
 <div class="card req-filter-card">
 <input id="pendBusca" placeholder="Buscar pessoa, número ou produto..." oninput="renderPendencias()">
 <select id="pendStatusFiltro" onchange="renderPendencias()"><option value="">Todos os status</option><option value="Pendente">Pendentes</option><option value="Pago">Pagos</option></select>
+<select id="pendTipoFiltro" onchange="renderPendencias()"><option value="">Emprestei e peguei</option><option value="cedido">Emprestei (saiu do estoque)</option><option value="tomado">Peguei emprestado (entrou no estoque)</option></select>
 <button class="req-clear" type="button" onclick="limparFiltrosPendencias()">Limpar filtros</button>
 </div>
 <div id="pendTable" class="req-list"></div>
 <div class="card req-new-card">
 <h3>Novo empréstimo</h3><div class="grid">
-<div><label>Para quem está sendo emprestado</label><input id="ePessoa" placeholder="Nome da pessoa / setor"></div>
+<div><label>Tipo de empréstimo</label><select id="eTipo" onchange="atualizarTipoEmprestimo()"><option value="cedido">Emprestei (sai do meu estoque)</option><option value="tomado">Peguei emprestado (entra no meu estoque)</option></select></div>
+<div><label id="ePessoaLabel">Para quem está sendo emprestado</label><input id="ePessoa" placeholder="Nome da pessoa / setor"></div>
 <div><label>Data do empréstimo</label><input id="eData" type="date"></div>
-<div><label>Produto</label><select id="eProd"></select></div><div><label>Quantidade</label><input id="eQtd" type="number" min="0.001" step="any" value="1" inputmode="decimal"></div>
+<div><label>Categoria</label><select id="eCategoria" onchange="filtrarProdutosEmp()"></select></div><div><label>Produto</label><select id="eProd"></select></div><div><label>Quantidade</label><input id="eQtd" type="number" min="0.001" step="any" value="1" inputmode="decimal"></div>
 <div><label>Unidade de medida</label><input id="eUn" type="text" readonly placeholder="Automática pelo produto"></div>
 <div><label>Observação</label><input id="eObs" placeholder="Opcional"></div>
 </div><div class="actions"><button type="button" data-stock-action="1" onclick="addEmprestimoItem()">Adicionar item</button><button type="button" class="green" data-stock-action="1" onclick="addEmprestimo()">Registrar empréstimo</button></div><div id="emprestimoDraftItems" class="req-items-box"></div></div>
@@ -177,8 +168,8 @@ function toggleLoginPass(){
 <section id="movimentos" class="view">
 <div class="mov-page-head"><div><h2>Entradas e Saídas</h2><div class="mov-count">Registre e acompanhe todas as movimentações do estoque</div></div></div>
 <div class="card mov-form-card"><h3>Lançar movimento</h3><div class="grid">
-<div><label>Categoria</label><select id="mCategoria" onchange="filtrarProdutosMovimento()"></select></div><div><label>Produto</label><select id="mProd"></select></div><div><label>Tipo</label><select id="mTipo"><option value="entrada">Entrada</option><option value="saida">Saída</option></select></div>
-<div><label>Quantidade</label><input id="mQtd" type="number" min="0.001" step="any" value="1" inputmode="decimal"></div><div><label>Data</label><input id="mData" type="date"></div><div><label>Setor</label><select id="mSetor"><option value="Bar">Bar</option><option value="Cozinha">Cozinha</option></select></div><div><label>Classificação</label><select id="mClassificacao"><option value="consumo">Consumo</option><option value="desvio">Desvio</option></select></div><div><label>Motivo</label><input id="mMot" placeholder="Compra, ajuste, perda..."></div>
+<div><label>Categoria</label><select id="mCategoria" onchange="filtrarProdutosMovimento()"></select></div><div><label>Produto</label><select id="mProd"></select></div><div><label>Tipo</label><select id="mTipo" onchange="atualizarClassificacaoMov()"><option value="entrada">Entrada</option><option value="saida">Saída</option></select></div>
+<div><label>Quantidade</label><input id="mQtd" type="number" min="0.001" step="any" value="1" inputmode="decimal"></div><div><label>Data</label><input id="mData" type="date"></div><div><label>Classificação</label><select id="mClassificacao"><option value="compra">Compra</option></select></div><div><label>Motivo</label><input id="mMot" placeholder="Compra, ajuste, perda..."></div>
 </div><div class="actions"><button class="mov-launch" data-stock-action="1" onclick="addMov()">Lançar movimento</button></div></div>
 <div class="card mov-list-card">
 <div class="mov-list-card-head"><div><h3>Histórico de movimentações</h3><span id="movCountLabel"></span></div>
@@ -272,10 +263,67 @@ function toggleLoginPass(){
 <div class="card"><div class="inventory-head"><div><h3>Contagem física</h3><span id="inventarioResumo" class="muted"></span></div><div class="inventory-actions"><select id="inventarioCategoriaImpressao" class="inventory-print-select" aria-label="Categoria para imprimir"><option value="__todas__">Todas as categorias</option></select><button class="secondary" type="button" id="btnImprimirInventario" onclick="imprimirInventario()">🖨️ Imprimir / PDF</button><button class="green" type="button" data-stock-action="1" data-rh-action="1" onclick="aplicarInventario()">✓ Aplicar inventário</button></div></div><div id="inventarioTable" class="inventory-table"></div></div>
 <div class="card"><div class="inventory-head"><div><h3>Histórico de inventários</h3><span id="inventarioHistoricoCount" class="muted"></span></div></div><div id="inventarioHistorico"></div></div></section>
 
+<section id="rnc" class="view">
+<div class="req-page-head"><div><h2 class="cmv-page-title"><span class="page-title-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M6 3h8l4 4v14H6z"/><path d="M14 3v4h4"/><path d="M12 11v4M12 18h.01"/></svg></span>RNC</h2><div class="muted rnc-intro">Achou alguma mercadoria com defeito? Ou problema? Separe o produto e faça sua RNC aqui.</div><div class="req-count"><span id="rncCount">0</span> registrada(s) · <span id="rncAbertas">0</span> aberta(s) · <span id="rncResolvidas">0</span> resolvida(s)</div></div></div>
+<div class="card req-new-card rnc-form">
+<h3>Nova RNC</h3>
+<div class="grid">
+<div><label>Categoria do produto</label><select id="rncCategoria" onchange="rncPopularProdutos()"></select></div>
+<div><label>Produto</label><select id="rncProduto" onchange="rncAtualizarUn()"></select></div>
+<div><label>Quantidade com problema</label><input id="rncQtd" type="number" min="0.001" step="any" placeholder="Ex.: 3" inputmode="decimal"></div>
+<div><label>Unidade de medida</label><input id="rncUn" readonly tabindex="-1" placeholder="Selecione o produto" aria-readonly="true"></div>
+<div><label>Tipo de problema</label><select id="rncTipo"><option value="">Selecione o problema...</option><option>Peso ou quantidade divergente</option><option>Embalagem danificada ou violada</option><option>Nota sem boleto</option><option>Nota com erro</option></select></div>
+<div><label>Nº da nota fiscal</label><input id="rncNota" maxlength="40" placeholder="Opcional" inputmode="numeric" autocomplete="off"></div>
+<div class="rnc-span-2"><label>Descrição</label><textarea id="rncDescricao" rows="3" placeholder="Descreva o que foi encontrado..."></textarea></div>
+<div class="rnc-span-2"><label>Foto</label>
+<div class="rnc-foto-box"><label class="rnc-foto-btn"><span class="ui-icon" aria-hidden="true"><svg viewBox="0 0 24 24" focusable="false"><path d="M4 8h3l1.5-2h7L17 8h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg></span><span id="rncFotoBtnTxt">Adicionar foto</span><input id="rncFoto" type="file" accept="image/*" onchange="rncCarregarFoto(this)"></label><div id="rncFotoPreview" class="rnc-foto-preview"></div></div></div>
+</div>
+<div class="actions"><button type="button" class="green" data-stock-action="1" onclick="addRnc()">⚠️ Solicitar RNC</button></div>
+</div>
+<div class="card req-filter-card">
+<input id="rncBusca" placeholder="Buscar número, produto, nota ou descrição..." oninput="renderRnc()">
+<select id="rncStatusFiltro" onchange="renderRnc()"><option value="">Todos os status</option><option value="Aberta">Abertas</option><option value="Resolvida">Resolvidas</option></select>
+<select id="rncTipoFiltro" onchange="renderRnc()"><option value="">Todos os problemas</option><option>Peso ou quantidade divergente</option><option>Embalagem danificada ou violada</option><option>Nota sem boleto</option><option>Nota com erro</option></select>
+<button class="req-clear" type="button" onclick="limparFiltrosRnc()">Limpar filtros</button>
+</div>
+<div id="rncList" class="req-list"></div>
+</section>
+
+<section id="malote" class="view">
+<div class="req-page-head"><div><h2 class="cmv-page-title"><span class="page-title-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="3" y="6" width="18" height="13" rx="2"/><path d="m3 8 9 6 9-6"/></svg></span>Malote NF</h2><div class="muted rnc-intro">Crie um malote e coloque nele várias notas fiscais para enviar.</div><div class="req-count"><span id="maloteCount">0</span> malote(s) · <span id="maloteNfCount">0</span> NF(s)</div></div></div>
+<div class="card req-new-card malote-form">
+<h3 id="maloteFormTitulo">Novo malote</h3>
+<div class="grid">
+<div><label>Semana</label><input id="maloteSemana" maxlength="60" placeholder="Ex.: Semana 41"></div>
+<div><label>Para:</label><input id="malotePara" maxlength="80" placeholder="Ex.: Financeiro / Contabilidade" autocomplete="off"></div>
+<div><label>Data</label><input id="maloteData" type="date"></div>
+</div>
+<div class="malote-nf-box">
+<h4>Notas fiscais do malote</h4>
+<div class="grid">
+<div><label>Número da NF</label><input id="maloteNfNum" maxlength="40" placeholder="Ex.: 123456" inputmode="numeric" autocomplete="off"></div>
+<div><label>Fornecedor</label><input id="maloteNfForn" maxlength="80" list="maloteFornecedores" placeholder="Nome do fornecedor" autocomplete="off"><datalist id="maloteFornecedores"></datalist></div>
+<div><label>Data de emissão</label><input id="maloteNfEmissao" type="date"></div>
+<div><label>Vencimento</label><input id="maloteNfVenc" type="date"></div>
+</div>
+<div class="actions"><button type="button" data-stock-action="1" onclick="maloteAddNf()">＋ Adicionar NF</button></div>
+<div id="maloteDraftList" class="malote-draft"></div>
+</div>
+<div class="actions"><button type="button" class="green" id="maloteSalvarBtn" data-stock-action="1" onclick="maloteSalvar()">Salvar malote</button><button type="button" class="secondary" id="maloteCancelarBtn" style="display:none" onclick="maloteCancelarEdicao()">Cancelar edição</button></div>
+</div>
+<div class="card req-filter-card">
+<input id="maloteBusca" placeholder="Buscar NF, fornecedor, semana ou destinatário..." oninput="renderMalote()">
+<button class="req-clear" type="button" onclick="document.getElementById('maloteBusca').value='';renderMalote()">Limpar filtros</button>
+</div>
+<div id="maloteList" class="req-list"></div>
+</section>
 <section id="cmv" class="view">
-<div class="page-head"><div><h2 class="cmv-page-title"><span class="page-title-icon nav-icon-cmv" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="3.5" y="3.5" width="17" height="17" rx="2"/><path d="M7 16l3.2-3.6 2.7 2.1L17 9"/><path d="M17 9h-3M17 9v3"/></svg></span>Análise de CMV</h2><div class="muted">Análise do consumo físico por quantidade. Sem valores financeiros nos produtos.</div></div><div class="report-tools"><label>Mês de referência</label><input id="cmvMes" type="month" onchange="renderAnaliseCMV()"></div></div>
+<div class="page-head"><div><h2 class="cmv-page-title"><span class="page-title-icon nav-icon-cmv" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="3.5" y="3.5" width="17" height="17" rx="2"/><path d="M7 16l3.2-3.6 2.7 2.1L17 9"/><path d="M17 9h-3M17 9v3"/></svg></span>Análise de CMV</h2><div class="muted">Consumo físico por quantidade e valores em reais calculados pelo custo cadastrado em cada produto.</div></div><div class="report-tools"><label>Mês de referência</label><input id="cmvMes" type="month" onchange="renderAnaliseCMV()"></div></div>
 <div class="card cmv-info-card"><div><strong>Como o CMV físico é calculado</strong><p class="muted">Consumo apurado = Estoque inicial + Entradas − Estoque final. As saídas registradas são comparadas com esse consumo para identificar diferenças de estoque. Desvios lançados nas saídas continuam separados por setor. Todos os números são quantidades.</p></div></div>
 <div id="cmvCards" class="grid report-cards cmv-cards"></div>
+<div class="card cmv-info-card"><div><strong><span class="cmv-title-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="2.5" y="6" width="19" height="12" rx="2"/><circle cx="12" cy="12" r="2.6"/><path d="M6 9.5h.01"/><path d="M18 14.5h.01"/></svg></span>CMV em reais (R$)</strong><p class="muted">Cada quantidade é multiplicada pelo custo unitário <b>atual</b> do produto (aba Produtos). CMV em R$ = Estoque inicial + Compras − Estoque final, em valor. Produtos sem custo cadastrado não entram nos valores.</p><p id="cmvValorAviso" class="muted"></p></div></div>
+<div id="cmvValorCards" class="grid report-cards cmv-cards"></div>
+<div class="card"><div class="report-section-head"><div><h3><span class="cmv-title-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="2.5" y="6" width="19" height="12" rx="2"/><circle cx="12" cy="12" r="2.6"/><path d="M6 9.5h.01"/><path d="M18 14.5h.01"/></svg></span>CMV em reais por categoria</h3><span class="muted">Valor do estoque, das compras, do consumo e dos desvios em cada categoria.</span></div></div><div id="cmvValorTabela"></div></div>
 <div class="card"><div class="report-section-head"><div><h3>📦 CMV por categoria</h3><span class="muted">Compara o consumo apurado pelo estoque com as saídas registradas em cada categoria.</span></div></div><div id="cmvCategoriaTabela"></div></div>
 <div class="card"><div class="report-section-head"><div><h3><span class="cmv-title-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 3 2.8 20h18.4L12 3Z"/><path d="M12 9v5"/><path d="M12 17h.01"/></svg></span>Desvios do CMV</h3><span class="muted">Desvios registrados nas saídas, com total geral e separação por setor.</span></div></div><div id="cmvDesvios"></div></div>
 <div class="card"><div class="report-section-head"><div><h3><span class="cmv-title-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 20V10"/><path d="M9 20V6"/><path d="M14 20v-8"/><path d="M19 20V4"/><path d="M3 20h18"/></svg></span>Desvios por setor</h3><span class="muted">Comparação entre Bar e Cozinha no período selecionado.</span></div></div><div id="cmvDesviosSetor"></div></div>
@@ -292,33 +340,20 @@ function toggleLoginPass(){
 <section id="auditoria" class="view"><div class="page-head"><div><h2>🛡️ Auditoria</h2><div class="muted">Histórico das principais ações realizadas no sistema.</div></div><div class="audit-tools"><input id="auditoriaBusca" placeholder="Buscar ação, usuário ou detalhe..." oninput="renderAuditoria()"><select id="auditoriaTipo" onchange="renderAuditoria()"><option value="">Todos os tipos</option><option>Login</option><option>Produto</option><option>Requisição</option><option>Movimentação</option><option>Compra</option><option>Inventário</option><option>Usuário</option><option>Sistema</option></select></div></div>
 <div class="card"><div class="report-section-head"><div><h3>Registro de atividades</h3><span id="auditoriaCount" class="muted"></span></div></div><div id="auditoriaTable"></div></div></section>
 
-<section id="usuarios" class="view" data-admin-only="1"><h2>Usuários</h2>
-<div class="card"><h3 id="userFormTitle">Cadastrar usuário</h3><div class="grid"><div><label>Nome</label><input id="uNome" autocomplete="name"></div><div><label>Usuário</label><input id="uLogin" autocomplete="username"></div><div><label>E-mail</label><input id="uEmail" type="email" placeholder="usuario@exemplo.com" autocomplete="email"></div><div><label>Senha</label><input id="uSenha" type="password" placeholder="Mínimo de 6 caracteres" autocomplete="new-password"></div><div><label>Perfil</label><select id="uPerfil"><option>Administrador</option><option>Estoquista</option><option>RH</option><option>Bar</option><option>Consulta</option></select></div></div><p class="muted" style="margin:10px 0 0">A conta é criada no Supabase Auth. A senha não é armazenada no banco do Estoquista.</p><div class="actions"><button id="userSaveBtn" type="button" onclick="addUser()">Adicionar usuário</button><button id="userCancelBtn" type="button" class="secondary" onclick="cancelEditUser()" style="display:none">Cancelar edição</button></div></div>
-<div class="card"><div id="userTable"></div></div></section>
+<section id="usuarios" class="view" data-admin-only="1">
+<div class="page-head user-page-head"><div><h2><span class="cmv-title-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.4"/><path d="M2.8 20c.6-3.4 3.2-5.2 6.2-5.2s5.6 1.8 6.2 5.2"/><path d="M16 5.2a3.2 3.2 0 0 1 0 6.1"/><path d="M18.2 14.9c1.8.7 3 2.3 3.4 5.1"/></svg></span>Usuários</h2><div class="muted">Gerencie quem acessa o sistema e o perfil de cada pessoa.</div></div><div class="audit-tools"><input id="userBusca" placeholder="Buscar nome, usuário ou e-mail..." oninput="renderUsuarios()"><select id="userPerfilFiltro" onchange="renderUsuarios()"><option value="">Todos os perfis</option><option>Administrador</option><option>Estoquista</option><option>RH</option><option>Bar</option><option>Consulta</option></select></div></div>
+<div id="userResumo" class="product-summary"></div>
+<div class="card user-form-card"><h3><span class="cmv-title-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="9.5" cy="8" r="3.4"/><path d="M3.2 20c.6-3.4 3.2-5.2 6.3-5.2s5.7 1.8 6.3 5.2"/><path d="M19 8v6"/><path d="M16 11h6"/></svg></span><span id="userFormTitle">Cadastrar usuário</span></h3><p class="muted user-form-sub">Preencha os dados de acesso e escolha o perfil que define o que a pessoa pode fazer.</p><div class="grid"><div><label>Nome</label><input id="uNome" autocomplete="name"></div><div><label>Usuário</label><input id="uLogin" autocomplete="username"></div><div><label>E-mail</label><input id="uEmail" type="email" placeholder="usuario@exemplo.com" autocomplete="email"></div><div><label>Senha</label><input id="uSenha" type="password" placeholder="Mínimo de 6 caracteres" autocomplete="new-password"></div><div><label>Perfil</label><select id="uPerfil"><option>Administrador</option><option>Estoquista</option><option>RH</option><option>Bar</option><option>Consulta</option></select></div></div><div class="user-note"><span class="user-note-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 3 4.5 6v5.5c0 4.4 3.1 7.7 7.5 9.5 4.4-1.8 7.5-5.1 7.5-9.5V6L12 3Z"/><path d="m9 12 2.2 2.2L15 10.5"/></svg></span><span>A conta é criada no Supabase Auth. A senha não é armazenada no banco do Estoquista.</span></div><div class="actions"><button id="userSaveBtn" type="button" onclick="addUser()">Adicionar usuário</button><button id="userCancelBtn" type="button" class="secondary" onclick="cancelEditUser()" style="display:none">Cancelar edição</button></div></div>
+<div class="card"><div class="report-section-head"><div><h3><span class="cmv-title-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.4"/><path d="M2.8 20c.6-3.4 3.2-5.2 6.2-5.2s5.6 1.8 6.2 5.2"/><path d="M16 5.2a3.2 3.2 0 0 1 0 6.1"/><path d="M18.2 14.9c1.8.7 3 2.3 3.4 5.1"/></svg></span>Usuários cadastrados</h3><span class="muted" id="userContagem"></span></div></div><div id="userTable"></div></div></section>
 
-<section id="maloteNF" class="view">
-<div class="page-head"><div><h2>🧾 Malote NF</h2><div class="muted">Organize várias notas fiscais em um único malote e imprima para conferência e assinatura.</div></div></div>
-<div class="card malote-form-card">
-<h3>📁 Criar novo malote</h3>
-<div class="grid malote-meta-grid">
-<div><label for="maloteSemana">Semana</label><input id="maloteSemana" placeholder="Ex.: Semana 2 / 05 a 11" required></div>
-<div><label for="malotePara">Para:</label><input id="malotePara" placeholder="Destinatário / setor" required></div>
-<div><label for="maloteData">Data do malote</label><input id="maloteData" type="date" required></div>
-</div>
-<div class="malote-nf-head"><h3>Notas fiscais</h3><button class="secondary" type="button" onclick="addMaloteNFRow()">＋ Adicionar NF</button></div>
-<div class="malote-table-wrap"><table class="malote-entry-table"><thead><tr><th>Número da NF</th><th>Fornecedor</th><th>Data de emissão</th><th>Vencimento</th><th></th></tr></thead><tbody id="maloteNFRows"></tbody></table></div>
-<div class="actions"><button class="green" type="button" onclick="createMaloteNF()">Salvar malote</button><button class="secondary" type="button" onclick="resetMaloteForm()">Limpar formulário</button></div>
-</div>
-<div class="card"><div class="page-head"><div><h3>Malotes salvos</h3><div class="muted">Cada malote pode conter várias notas fiscais.</div></div><span class="summary-pill" id="maloteNFCount">0 malotes</span></div><div id="maloteNFList"></div></div>
-</section>
-
-<section id="menu" class="view"><h2>Menu</h2>
-<div class="card"><h3>📊 Central de exportação</h3><p class="muted">Gere relatórios em <strong>PDF</strong> (pronto para imprimir, com data, hora e responsável) ou em planilha <strong>Excel (.xlsx)</strong>. Os filtros aplicados em cada tela são respeitados.</p><div id="menuExportacaoLista" class="export-list"></div><div class="actions"><button class="secondary" onclick="exportAll()">📁 Exportar dados completos</button></div></div>
-<div class="card" id="cardInstalarApp"><h3>📲 Instalar aplicativo</h3><p class="muted" id="instalarTexto"></p><div class="actions"><button class="green" type="button" id="btnInstalarApp" onclick="instalarApp()" style="display:none">📲 Instalar O Estoquista</button></div></div>
-<div class="card"><h3>Dados</h3>
-<button class="danger" onclick="deleteAllMovements()">Apagar todas as entradas e saídas</button>
-<span class="muted" style="display:block;margin-top:8px">🔒 Apenas Administrador pode apagar todas as movimentações, inclusive as vinculadas a requisições.</span><button id="resetDataBtn" class="danger" onclick="resetData()">Apagar todos os dados</button><span id="resetDataLocked" class="muted" style="display:none">🔒 Apenas Administrador pode apagar todos os dados.</span></div>
-<div class="card"><h3>Sobre o sistema</h3><p style="margin:0 0 8px"><strong>Desenvolvido por:</strong> João Azevedo</p><p style="margin:0"><strong>Contato:</strong> azevedojoaoestoque@gmail.com</p></div>
+<section id="menu" class="view">
+<div class="page-head menu-page-head"><div><h2><span class="cmv-title-icon" aria-hidden="true"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h10"/><path d="M18 7h2"/><circle cx="16" cy="7" r="2"/><path d="M4 17h2"/><path d="M10 17h10"/><circle cx="8" cy="17" r="2"/></svg></span>Menu</h2><div class="muted">Exportações, instalação do aplicativo, manutenção dos dados e informações do sistema.</div></div></div>
+<div class="card menu-card"><div class="menu-card-head"><h3><span class="cmv-title-icon" aria-hidden="true"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8l-5-5Z"/><path d="M14 3v5h5"/><path d="M9 17v-3"/><path d="M12 17v-5"/><path d="M15 17v-2"/></svg></span>Central de exportação</h3><p class="muted">Gere relatórios em <strong>PDF</strong> (pronto para imprimir, com data, hora e responsável) ou em planilha <strong>Excel (.xlsx)</strong>. Os filtros aplicados em cada tela são respeitados.</p></div><div id="menuExportacaoLista" class="export-list"></div><div class="actions"><button class="secondary" onclick="exportAll()"><span class="btn-ic" aria-hidden="true"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v11"/><path d="m7.5 11 4.5 4.5L16.5 11"/><path d="M5 19.5h14"/></svg></span>Exportar dados completos</button></div></div>
+<div class="card menu-card" id="cardInstalarApp"><div class="menu-card-head"><h3><span class="cmv-title-icon" aria-hidden="true"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="7" y="2.5" width="10" height="19" rx="2.4"/><path d="M11 18.5h2"/></svg></span>Instalar aplicativo</h3><p class="muted" id="instalarTexto"></p></div><div class="actions"><button class="green" type="button" id="btnInstalarApp" onclick="instalarApp()" style="display:none"><span class="btn-ic" aria-hidden="true"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="7" y="2.5" width="10" height="19" rx="2.4"/><path d="M11 18.5h2"/></svg></span>Instalar O Estoquista</button></div></div>
+<div class="card menu-card menu-danger"><div class="menu-card-head"><h3><span class="cmv-title-icon" aria-hidden="true"><svg viewBox="0 0 24 24" aria-hidden="true"><ellipse cx="12" cy="6" rx="7" ry="3"/><path d="M5 6v6c0 1.7 3.1 3 7 3s7-1.3 7-3V6"/><path d="M5 12v6c0 1.7 3.1 3 7 3s7-1.3 7-3v-6"/></svg></span>Manutenção dos dados</h3><div class="menu-warning"><span class="btn-ic" aria-hidden="true"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 2.8 20h18.4L12 3Z"/><path d="M12 9v5"/><path d="M12 17h.01"/></svg></span><span>Ações definitivas. Exporte os dados completos antes de apagar qualquer coisa.</span></div></div>
+<div class="menu-action-row"><div class="menu-action-text"><strong>Apagar todas as entradas e saídas</strong><span class="muted">Remove todo o histórico de movimentações, inclusive as vinculadas a requisições, e reverte o efeito no estoque.</span><span class="menu-lock"><span class="btn-ic" aria-hidden="true"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg></span>Apenas Administrador</span></div><button class="danger" onclick="deleteAllMovements()"><span class="btn-ic" aria-hidden="true"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M19 6l-1 15H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/></svg></span>Apagar movimentações</button></div>
+<div class="menu-action-row"><div class="menu-action-text"><strong>Apagar todos os dados</strong><span class="muted">Remove produtos, requisições, movimentações e anotações. O usuário administrador principal é mantido.</span><span id="resetDataLocked" class="menu-lock" style="display:none"><span class="btn-ic" aria-hidden="true"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg></span>Apenas Administrador pode apagar todos os dados.</span></div><button id="resetDataBtn" class="danger" onclick="resetData()"><span class="btn-ic" aria-hidden="true"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M19 6l-1 15H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/></svg></span>Apagar tudo</button></div></div>
+<div class="card menu-card"><div class="menu-card-head"><h3><span class="cmv-title-icon" aria-hidden="true"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 11v5"/><path d="M12 8h.01"/></svg></span>Sobre o sistema</h3></div><div class="about-list"><div class="about-item"><span class="about-icon" aria-hidden="true"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="3.6"/><path d="M4.5 20c.8-3.8 3.7-5.6 7.5-5.6s6.7 1.8 7.5 5.6"/></svg></span><div><small>Desenvolvido por</small><strong>João Azevedo</strong></div></div><div class="about-item"><span class="about-icon" aria-hidden="true"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3.5 7 8.5 6 8.5-6"/></svg></span><div><small>Contato</small><strong><a href="mailto:azevedojoaoestoque@gmail.com">azevedojoaoestoque@gmail.com</a></strong></div></div></div></div>
 </section>
 </main>
 <div id="reqModal" class="req-modal" onclick="if(event.target===this)closeReqModal()"><div class="req-sheet">
